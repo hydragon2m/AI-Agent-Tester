@@ -64,8 +64,8 @@
 
         <!-- Info banner -->
         <div class="settings-info-banner">
-          <span>🔄</span>
-          <span>Khi provider ưu tiên hết token, hệ thống <strong>tự động chuyển</strong> sang provider tiếp theo. Điền key của các provider bạn có để dùng fallback.</span>
+          <span>🔒</span>
+          <span>Các API Key được cấu hình an toàn ở Backend (file <code>.env</code>). Hệ thống sẽ tự động dùng và chuyển đổi (fallback) giữa các provider.</span>
         </div>
 
         <!-- Provider 1: Gemini -->
@@ -74,19 +74,9 @@
             <div class="provider-logo gemini-logo">G</div>
             <div class="provider-info">
               <span class="provider-name">Google Gemini</span>
-              <span class="provider-tag free">Miễn phí · Ưu tiên 1</span>
+              <span class="provider-tag free">Ưu tiên 1</span>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="enable-gemini" checked>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="provider-key-row">
-            <div class="input-with-icon">
-              <input type="password" id="key-gemini" placeholder="AIza..." />
-              <button class="btn-reveal" data-target="key-gemini">👁</button>
-            </div>
-            <a href="https://aistudio.google.com/apikey" target="_blank" class="get-key-link">Lấy key miễn phí →</a>
+            <span class="provider-status-badge" id="status-badge-gemini" style="font-size:0.75rem; padding:4px 8px; border-radius:12px; background:rgba(255,255,255,0.08);">Checking...</span>
           </div>
           <div class="provider-models">Model: <code>gemini-flash-latest</code> → <code>gemini-2.5-flash</code></div>
         </div>
@@ -97,21 +87,11 @@
             <div class="provider-logo claude-logo">A</div>
             <div class="provider-info">
               <span class="provider-name">Anthropic Claude</span>
-              <span class="provider-tag paid">Trả phí · Ưu tiên 2</span>
+              <span class="provider-tag paid">Ưu tiên 2</span>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="enable-claude">
-              <span class="toggle-slider"></span>
-            </label>
+            <span class="provider-status-badge" id="status-badge-claude" style="font-size:0.75rem; padding:4px 8px; border-radius:12px; background:rgba(255,255,255,0.08);">Checking...</span>
           </div>
-          <div class="provider-key-row">
-            <div class="input-with-icon">
-              <input type="password" id="key-claude" placeholder="sk-ant-..." />
-              <button class="btn-reveal" data-target="key-claude">👁</button>
-            </div>
-            <a href="https://console.anthropic.com/keys" target="_blank" class="get-key-link">Tạo key →</a>
-          </div>
-          <div class="provider-models">Model: <code>claude-sonnet-4-5</code> (Extended Thinking ✨)</div>
+          <div class="provider-models">Model: <code>claude-3-5-sonnet-latest</code></div>
         </div>
 
         <!-- Provider 3: OpenAI -->
@@ -120,19 +100,9 @@
             <div class="provider-logo openai-logo">⊕</div>
             <div class="provider-info">
               <span class="provider-name">OpenAI GPT-4o</span>
-              <span class="provider-tag paid">Trả phí · Ưu tiên 3</span>
+              <span class="provider-tag paid">Ưu tiên 3</span>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="enable-openai">
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="provider-key-row">
-            <div class="input-with-icon">
-              <input type="password" id="key-openai" placeholder="sk-..." />
-              <button class="btn-reveal" data-target="key-openai">👁</button>
-            </div>
-            <a href="https://platform.openai.com/api-keys" target="_blank" class="get-key-link">Tạo key →</a>
+            <span class="provider-status-badge" id="status-badge-openai" style="font-size:0.75rem; padding:4px 8px; border-radius:12px; background:rgba(255,255,255,0.08);">Checking...</span>
           </div>
           <div class="provider-models">Model: <code>gpt-4o</code> → <code>gpt-4o-mini</code></div>
         </div>

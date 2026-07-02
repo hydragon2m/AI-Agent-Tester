@@ -100,11 +100,22 @@ const PROVIDER_META = {
   openai: { label: 'GPT-4o', emoji: '🔵', color: '#3b82f6' },
 };
 
+async function fetchServerStatus() {
+  try {
+    const res = await fetch('http://localhost:3001/api/ai/status');
+    if (res.ok) {
+      STATE.serverProviders = await res.json();
+      updateApiStatus();
+    }
+  } catch (e) {
+    console.error('Error fetching server AI status:', e);
+  }
+}
+
 function updateApiStatus(activeProvider = null) {
   const el = $('#api-status');
   const txt = $('#status-text');
   const dot = el.querySelector('.status-dot');
-  const anyEnabled = Object.values(STATE.providers).some(p => p.enabled && p.key);
 
   if (STATE.demoMode) {
     el.classList.add('connected');
@@ -114,181 +125,57 @@ function updateApiStatus(activeProvider = null) {
     return;
   }
 
+  const providers = STATE.serverProviders || {};
+  const anyEnabled = Object.values(providers).some(p => p.enabled);
+
   if (anyEnabled) {
     el.classList.add('connected');
-    const prov = activeProvider || Object.keys(STATE.providers).find(k => STATE.providers[k].enabled && STATE.providers[k].key);
+    const prov = activeProvider || Object.keys(providers).find(k => providers[k].enabled);
     const meta = PROVIDER_META[prov] || PROVIDER_META.gemini;
-    txt.textContent = `${meta.emoji} ${meta.label} connected`;
+    txt.textContent = `${meta.emoji} ${meta.label} server`;
     txt.style.color = '';
     dot.style.background = meta.color;
   } else {
     el.classList.remove('connected');
-    txt.textContent = 'Chưa cấu hình';
+    txt.textContent = 'Chưa cấu hình (Backend)';
     txt.style.color = '';
     dot.style.background = '';
   }
 }
 
-/* ── Gemini API Call ────────────────────────────────────── */
-async function callGemini(systemPrompt, userContent, retryCount = 0) {
-  const key = STATE.providers.gemini?.key;
-  if (!key) throw new Error('NO_KEY_GEMINI');
 
-  const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
-  const model = MODELS[Math.min(retryCount, MODELS.length - 1)];
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-
-  const body = {
-    system_instruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userContent }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 8192 }
-  };
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const errMsg = err?.error?.message || `HTTP ${res.status}`;
-    const isRetryable = res.status === 429 || res.status === 404
-      || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')
-      || errMsg.includes('not found') || errMsg.includes('not supported');
-
-    if (isRetryable && retryCount < MODELS.length - 1) {
-      showToast(`⏳ Thử model ${MODELS[retryCount + 1]}...`, 'info');
-      await new Promise(r => setTimeout(r, 1500));
-      return callGemini(systemPrompt, userContent, retryCount + 1);
-    }
-    const isQuota = res.status === 429 || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED');
-    throw new Error(isQuota ? 'QUOTA_EXCEEDED' : errMsg);
-  }
-
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-/* ── Claude API Call ────────────────────────────────────── */
-async function callClaude(systemPrompt, userContent) {
-  const key = STATE.providers.claude?.key;
-  if (!key) throw new Error('NO_KEY_CLAUDE');
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const errMsg = err?.error?.message || `HTTP ${res.status}`;
-    const isQuota = res.status === 429 || errMsg.includes('credit') || errMsg.includes('quota');
-    throw new Error(isQuota ? 'QUOTA_EXCEEDED' : errMsg);
-  }
-
-  const data = await res.json();
-  const textBlock = data.content?.find(b => b.type === 'text');
-  return textBlock?.text || '';
-}
-
-/* ── OpenAI API Call ────────────────────────────────────── */
-async function callOpenAI(systemPrompt, userContent, retryCount = 0) {
-  const key = STATE.providers.openai?.key;
-  if (!key) throw new Error('NO_KEY_OPENAI');
-
-  const MODELS = ['gpt-4o', 'gpt-4o-mini'];
-  const model = MODELS[Math.min(retryCount, MODELS.length - 1)];
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 8192,
-      temperature: 0.4,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const errMsg = err?.error?.message || `HTTP ${res.status}`;
-    const isRetryable = res.status === 429 || errMsg.includes('quota');
-    if (isRetryable && retryCount < MODELS.length - 1) {
-      showToast(`⏳ Thử model ${MODELS[retryCount + 1]}...`, 'info');
-      await new Promise(r => setTimeout(r, 1500));
-      return callOpenAI(systemPrompt, userContent, retryCount + 1);
-    }
-    throw new Error(isRetryable ? 'QUOTA_EXCEEDED' : errMsg);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
-}
 
 /* ── Smart AI Router with Auto-Fallback ─────────────────── */
 async function callAI(systemPrompt, userContent) {
-  // Build ordered list of enabled providers with keys
-  const ORDER = ['gemini', 'claude', 'openai'];
-  const available = ORDER.filter(p => STATE.providers[p]?.enabled && STATE.providers[p]?.key);
+  const activeSkill = STATE.activeSkill || 'testcase';
+  const nodeId = activeNodeId || null;
 
-  if (available.length === 0) {
-    showToast('⚠️ Chưa cấu hình API Key nào! Vào ⚙️ Settings để thêm key.', 'error');
-    openSettings();
-    throw new Error('No API key');
-  }
+  showLoading(`🤖 AI đang phân tích (Backend)...`);
 
-  let lastError = null;
-  for (const provider of available) {
-    try {
-      updateApiStatus(provider);
-      showLoading(`🤖 ${PROVIDER_META[provider].label} đang phân tích...`);
-      let result;
-      if (provider === 'gemini') result = await callGemini(systemPrompt, userContent);
-      else if (provider === 'claude') result = await callClaude(systemPrompt, userContent);
-      else if (provider === 'openai') result = await callOpenAI(systemPrompt, userContent);
+  const res = await fetch('http://localhost:3001/api/ai/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      skill: activeSkill,
+      systemPrompt,
+      userPrompt: userContent,
+      nodeId
+    })
+  });
 
-      STATE.activeProvider = provider;
-      updateApiStatus(provider);
-      return result;
-    } catch (e) {
-      lastError = e;
-      const isExhausted = e.message === 'QUOTA_EXCEEDED' || e.message.includes('NO_KEY');
-      if (isExhausted) {
-        const nextIdx = available.indexOf(provider) + 1;
-        if (nextIdx < available.length) {
-          const next = PROVIDER_META[available[nextIdx]].label;
-          showToast(`⚡ ${PROVIDER_META[provider].label} hết quota → chuyển sang ${next}...`, 'info');
-          await new Promise(r => setTimeout(r, 1000));
-          continue; // try next provider
-        }
-      } else {
-        throw e; // non-quota error, don't fallback
-      }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (err.error === 'NO_API_KEYS_ON_SERVER') {
+      showToast('⚠️ Chưa cấu hình API Key ở backend! Hãy cấu hình trong file .env.', 'error');
+      throw new Error('No API keys configured on server');
     }
+    throw new Error(err.message || `HTTP ${res.status}`);
   }
 
-  // All providers exhausted
-  showQuotaError();
-  throw new Error('ALL_PROVIDERS_EXHAUSTED');
+  const data = await res.json();
+  STATE.activeProvider = data.provider;
+  updateApiStatus(data.provider);
+  return data.output;
 }
 
 /* ── Skill Prompts ──────────────────────────────────────── */
@@ -863,17 +750,37 @@ $('#import-projects-input').addEventListener('change', (e) => {
 });
 
 /* ── Settings Modal ─────────────────────────────────────── */
-function openSettings() {
+async function openSettings() {
   const modal = $('#modal-settings');
   modal.style.display = 'flex';
-  // Load saved values into form
-  const p = STATE.providers;
-  $('#key-gemini').value = p.gemini?.key || '';
-  $('#key-claude').value = p.claude?.key || '';
-  $('#key-openai').value = p.openai?.key || '';
-  $('#enable-gemini').checked = p.gemini?.enabled !== false;
-  $('#enable-claude').checked = !!p.claude?.enabled;
-  $('#enable-openai').checked = !!p.openai?.enabled;
+  
+  // Show checking status
+  ['gemini', 'claude', 'openai'].forEach(p => {
+    const badge = $(`#status-badge-${p}`);
+    if (badge) {
+      badge.textContent = 'Đang kiểm tra...';
+      badge.style.background = 'rgba(255,255,255,0.08)';
+      badge.style.color = '#94a3b8';
+    }
+  });
+
+  await fetchServerStatus();
+  
+  const providers = STATE.serverProviders || {};
+  ['gemini', 'claude', 'openai'].forEach(p => {
+    const badge = $(`#status-badge-${p}`);
+    if (badge) {
+      if (providers[p]?.enabled) {
+        badge.textContent = 'Hoạt động';
+        badge.style.background = 'rgba(16,185,129,0.15)';
+        badge.style.color = '#10b981';
+      } else {
+        badge.textContent = 'Chưa có Key (.env)';
+        badge.style.background = 'rgba(239,68,68,0.15)';
+        badge.style.color = '#ef4444';
+      }
+    }
+  });
 
   // Load Lark Mapping values
   const lm = STATE.larkMapping || {
@@ -900,27 +807,7 @@ $('#close-settings').addEventListener('click', closeSettings);
 $('#cancel-settings').addEventListener('click', closeSettings);
 $('#modal-settings').addEventListener('click', (e) => { if (e.target === $('#modal-settings')) closeSettings(); });
 
-// Generic reveal toggle for all provider key inputs
-$$('.btn-reveal').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const targetId = btn.dataset.target;
-    const inp = targetId ? $(`#${targetId}`) : null;
-    if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
-  });
-});
-
 $('#save-settings').addEventListener('click', () => {
-  const newProviders = {
-    gemini: { key: $('#key-gemini').value.trim(), enabled: $('#enable-gemini').checked },
-    claude: { key: $('#key-claude').value.trim(), enabled: $('#enable-claude').checked },
-    openai: { key: $('#key-openai').value.trim(), enabled: $('#enable-openai').checked },
-  };
-  STATE.providers = newProviders;
-  // Also update legacy key for backward compat
-  STATE.apiKey = newProviders.gemini.key || newProviders.claude.key || newProviders.openai.key;
-  localStorage.setItem('qa_providers', JSON.stringify(newProviders));
-  localStorage.setItem('qa_api_key', STATE.apiKey);
-
   // Save Lark Mapping values
   const newLarkMapping = {
     priority: {
@@ -940,10 +827,8 @@ $('#save-settings').addEventListener('click', () => {
   STATE.larkMapping = newLarkMapping;
   localStorage.setItem('qa_lark_mapping', JSON.stringify(newLarkMapping));
 
-  updateApiStatus();
   closeSettings();
-  const activeCount = Object.values(newProviders).filter(p => p.enabled && p.key).length;
-  showToast(`✅ Đã lưu ${activeCount} AI provider${activeCount > 1 ? ' (auto-fallback bật)' : ''}`, 'success');
+  showToast('✅ Đã lưu cấu hình Lark Base Mapping!', 'success');
 });
 
 /* ── Skill Navigation ───────────────────────────────────── */
@@ -1765,20 +1650,8 @@ function init() {
     enableDemoMode();
   }
 
-  updateApiStatus();
+  fetchServerStatus();
   renderHistory();
-
-  const anyKey = Object.values(STATE.providers).some(p => p.enabled && p.key);
-  if (!anyKey) {
-    setTimeout(() => {
-      showToast('👋 Click ⚙️ Settings để thêm Gemini API Key (miễn phí)!', 'info');
-    }, 800);
-  } else {
-    const ready = Object.entries(STATE.providers)
-      .filter(([, v]) => v.enabled && v.key)
-      .map(([k]) => PROVIDER_META[k].label);
-    console.log(`%c✅ AI Providers ready: ${ready.join(' → ')}`, 'color:#10b981;font-size:12px;');
-  }
 
   const projCount = PROJECT_STATE.projects.length;
   if (projCount > 0) {
