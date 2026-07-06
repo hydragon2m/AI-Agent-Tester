@@ -1,7 +1,90 @@
 const { dbRun, dbGet, dbAll } = require('../db/db_manager');
+const { getModuleForNode, getDescendantNodeIds } = require('./node.service');
 
 async function getTestCases(nodeId) {
   return dbAll('SELECT * FROM test_cases WHERE node_id = ?', [nodeId]);
+}
+
+function sanitizeAbbreviation(name) {
+  const letters = String(name || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
+  return letters || 'TC';
+}
+
+// Scopes TC ID numbering to the module a node belongs to: same prefix, one
+// shared counter across every screen/feature under that module, so IDs never
+// collide within the module even when generated from different features.
+async function getModuleIdScope(nodeId) {
+  const moduleNode = await getModuleForNode(nodeId);
+  const abbreviation = (moduleNode?.abbreviation || '').trim().toUpperCase() || sanitizeAbbreviation(moduleNode?.name);
+  const scopeNodeIds = moduleNode ? await getDescendantNodeIds(moduleNode.id) : [nodeId];
+  const placeholders = scopeNodeIds.map(() => '?').join(',');
+  const rows = scopeNodeIds.length
+    ? await dbAll(`SELECT id FROM test_cases WHERE node_id IN (${placeholders})`, scopeNodeIds)
+    : [];
+
+  const existingIds = new Set(rows.map(r => r.id));
+  const prefix = `${abbreviation}-`;
+  let maxNumber = 0;
+  for (const id of existingIds) {
+    if (id && id.toUpperCase().startsWith(prefix)) {
+      const n = parseInt(id.slice(prefix.length), 10);
+      if (!isNaN(n)) maxNumber = Math.max(maxNumber, n);
+    }
+  }
+
+  return { prefix, nextNumber: maxNumber + 1, existingIds };
+}
+
+// Server-side guarantee: every saved TC gets an id in "{ModuleAbbrev}-000"
+// format, unique within its module. IDs the caller (AI output / import) sent
+// are kept as-is when they already match and don't collide; anything missing,
+// malformed, or duplicated within the module gets renumbered here.
+async function assignModuleScopedIds(nodeId, testCases) {
+  const { prefix, nextNumber, existingIds } = await getModuleIdScope(nodeId);
+  const idPattern = new RegExp(`^${prefix}\\d+$`, 'i');
+  let counter = nextNumber;
+
+  for (const tc of testCases) {
+    const isNewRow = !tc.id || !(await dbGet('SELECT 1 FROM test_cases WHERE id = ?', [tc.id]));
+    if (!isNewRow) continue; // updating an existing TC keeps its current id
+
+    const isValid = tc.id && idPattern.test(tc.id) && !existingIds.has(tc.id);
+    if (!isValid) {
+      let candidate;
+      do {
+        candidate = `${prefix}${String(counter).padStart(3, '0')}`;
+        counter++;
+      } while (existingIds.has(candidate));
+      tc.id = candidate;
+    }
+    existingIds.add(tc.id);
+  }
+}
+
+async function getTestCasesByStatus(nodeId, statusLabel) {
+  return dbAll(
+    'SELECT * FROM test_cases WHERE node_id = ? AND LOWER(TRIM(status)) = LOWER(TRIM(?))',
+    [nodeId, statusLabel]
+  );
+}
+
+async function markLarkSynced(testCaseId, larkRecordId) {
+  await dbRun(
+    'UPDATE test_cases SET lark_record_id = ?, lark_synced_at = ? WHERE id = ?',
+    [larkRecordId, new Date().toISOString(), testCaseId]
+  );
+}
+
+// Old record IDs point at whatever Base was linked before — once the project
+// links a different Base those IDs are meaningless, and pushing them as an
+// update instead of a create fails outright (record doesn't exist there).
+async function clearLarkSyncForProject(projectId) {
+  const result = await dbRun(
+    `UPDATE test_cases SET lark_record_id = '', lark_synced_at = NULL
+     WHERE node_id IN (SELECT id FROM nodes WHERE project_id = ?)`,
+    [projectId]
+  );
+  return result.changes;
 }
 
 async function saveTestCases(nodeId, newTCs, replace = false) {
@@ -14,6 +97,8 @@ async function saveTestCases(nodeId, newTCs, replace = false) {
       await dbRun(`DELETE FROM test_cases WHERE node_id = ?`, [nodeId]);
     }
   }
+
+  await assignModuleScopedIds(nodeId, newTCs);
 
   for (const tc of newTCs) {
     const stepsJson = JSON.stringify(tc.steps || []);
@@ -192,6 +277,9 @@ async function restoreRevision(testCaseId, version) {
 
 module.exports = {
   getTestCases,
+  getTestCasesByStatus,
+  markLarkSynced,
+  clearLarkSyncForProject,
   saveTestCases,
   getTestCaseRevisions,
   restoreRevision

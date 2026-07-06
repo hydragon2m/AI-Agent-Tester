@@ -12,7 +12,8 @@ router.get('/', async (req, res) => {
       projectId: n.project_id,
       name: n.name,
       type: n.type,
-      context: n.context || ''
+      context: n.context || '',
+      abbreviation: n.abbreviation || ''
     }));
     res.json(mapped);
   } catch (e) {
@@ -23,13 +24,13 @@ router.get('/', async (req, res) => {
 
 // Add Node
 router.post('/', async (req, res) => {
-  const { parentId, name, type, context } = req.body;
+  const { parentId, name, type, context, abbreviation } = req.body;
   if (!name || !['project', 'module', 'screen', 'feature'].includes(type)) {
     return res.status(400).json({ error: 'Invalid node payload' });
   }
   try {
     const id = 'node_' + Date.now().toString();
-    const newNode = await createNode(id, parentId, type, name, context);
+    const newNode = await createNode(id, parentId, type, name, context, abbreviation);
     res.json(newNode);
   } catch (e) {
     console.error(e);
@@ -39,9 +40,9 @@ router.post('/', async (req, res) => {
 
 // Rename Node
 router.put('/:id', async (req, res) => {
-  const { name, context } = req.body;
+  const { name, context, abbreviation } = req.body;
   try {
-    const updated = await updateNode(req.params.id, name, context);
+    const updated = await updateNode(req.params.id, name, context, abbreviation);
     if (!updated) {
       return res.status(404).json({ error: 'Node not found' });
     }

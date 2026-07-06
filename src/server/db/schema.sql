@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS projects (
     api_base_url TEXT,
     tc_prefix TEXT,
     modules TEXT,
+    lark_base_app_token TEXT DEFAULT '',
+    lark_testcase_table_id TEXT DEFAULT '',
+    lark_bug_table_id TEXT DEFAULT '',
+    lark_source_url TEXT DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT
 );
@@ -23,6 +27,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     type TEXT NOT NULL CHECK(type IN ('project', 'module', 'screen', 'feature')),
     name TEXT NOT NULL,
     context TEXT,
+    abbreviation TEXT DEFAULT '',
     sort_order INTEGER DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT,
@@ -48,6 +53,8 @@ CREATE TABLE IF NOT EXISTS test_cases (
     status TEXT DEFAULT '',
     actual_result TEXT DEFAULT '',
     related_bug TEXT DEFAULT '',
+    lark_record_id TEXT DEFAULT '',
+    lark_synced_at TEXT,
     version INTEGER DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT,
@@ -84,6 +91,21 @@ CREATE TABLE IF NOT EXISTS ai_runs (
     error_message TEXT,
     created_at TEXT NOT NULL
 );
+
+-- Skill Execution History (per node + skill: requirement input, output, test case snapshot)
+CREATE TABLE IF NOT EXISTS skill_runs (
+    id TEXT PRIMARY KEY,
+    node_id TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    title TEXT,
+    input TEXT,
+    output_json TEXT,
+    raw_output TEXT,
+    provider TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_skill_runs_node_skill ON skill_runs(node_id, skill);
 
 -- Snippets Table
 CREATE TABLE IF NOT EXISTS snippets (

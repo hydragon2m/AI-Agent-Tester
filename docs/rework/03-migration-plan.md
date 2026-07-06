@@ -2,13 +2,13 @@
 
 ## Phase 1: Keep Current Files Running
 
-- Keep `index.html`, `style.css`, `app.js`, and `server_db.js`.
+- Keep the original static prototype running while backend boundaries are introduced.
 - Add npm scripts for local run and syntax checks.
 - Serve static files from the existing Express server.
 - Fix runtime errors around tree-node test-case persistence.
 - Reduce unsafe rendering in high-traffic areas.
 
-Status: mostly complete for stabilization. The backend has since moved from `server_db.js` into `src/server/app.js`.
+Status: complete for stabilization. The backend has since moved from `server_db.js` into `src/server/app.js`, and the old static prototype files have been removed from the active repo tree.
 
 ## Phase 2: Add Backend AI API
 
@@ -52,8 +52,10 @@ The active web client should call relative API paths through Vite proxy or Expre
 - Build React app beside the current static app.
 - Move one workflow at a time:
   - project tree
-  - generate test case
-  - test case table
+  - skill switcher
+  - prompt/options panel
+  - generate output through backend AI API
+  - test case table and generic output renderers
   - export actions
   - provider settings
 
@@ -61,14 +63,22 @@ Status: initial Vite/React shell exists under `src/web/` with:
 
 - project tree CRUD
 - provider status/settings
+- skill switcher for Test Cases, API Test, UI Automation, Bug Analyzer, Security, and Performance
 - test-case generation through backend AI API
+- generic backend generation flow for non-testcase skills
 - load/save test cases by selected node
-- JSON export
+- JSON/CSV export for test cases
+- copy/export actions for generated output
+- local demo mode and local history
+- manual prompt processing, update/append, Lark copy/mapping, Markdown export
+- tree export/import
 
-Legacy root files (`index.html`, `style.css`, `app.js`) should stay read-only until the React web flow reaches feature parity.
+Legacy static files are no longer root runtime files and are no longer kept as an in-repo fallback.
+
+Next step: add focused UI/API tests for the React workflows.
 
 ## Phase 5: Remove Prototype Artifacts
 
-- Delete patch/fix/repair scripts after behavior is covered.
-- Remove direct browser AI calls.
-- Remove localStorage project/test-case persistence.
+- Static prototype artifacts have been removed from root runtime.
+- Direct browser AI calls have been removed from the active web client.
+- LocalStorage project/test-case persistence has been replaced by backend APIs for active runtime data.

@@ -77,7 +77,8 @@ function initDatabase() {
                         return reject(new Error('Schema setup failed: nodes table does not exist.'));
                     }
 
-                    importFromJson()
+                    runColumnMigrations()
+                        .then(importFromJson)
                         .then(resolve)
                         .catch(reject);
                 });
@@ -87,6 +88,27 @@ function initDatabase() {
             }
         });
     });
+}
+
+// Add columns introduced after a table's initial CREATE TABLE IF NOT EXISTS,
+// since that statement is a no-op on databases that already have the table.
+async function ensureColumn(table, column, definition) {
+    const columns = await dbAll(`PRAGMA table_info(${table})`);
+    const exists = columns.some(c => c.name === column);
+    if (!exists) {
+        await dbRun(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        console.log(`[DB Manager] Added column ${table}.${column}`);
+    }
+}
+
+async function runColumnMigrations() {
+    await ensureColumn('test_cases', 'lark_record_id', "TEXT DEFAULT ''");
+    await ensureColumn('test_cases', 'lark_synced_at', 'TEXT');
+    await ensureColumn('projects', 'lark_base_app_token', "TEXT DEFAULT ''");
+    await ensureColumn('projects', 'lark_testcase_table_id', "TEXT DEFAULT ''");
+    await ensureColumn('projects', 'lark_bug_table_id', "TEXT DEFAULT ''");
+    await ensureColumn('projects', 'lark_source_url', "TEXT DEFAULT ''");
+    await ensureColumn('nodes', 'abbreviation', "TEXT DEFAULT ''");
 }
 
 // Traverse up tree to find project node ID
