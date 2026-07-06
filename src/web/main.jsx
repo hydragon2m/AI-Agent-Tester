@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { generateAiOutput } from './backend-api/ai.api';
 import { fetchTestCases, saveTestCasesApi } from './backend-api/test-cases.api';
@@ -46,6 +46,19 @@ class ErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+function fileToImagePayload(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const data = dataUrl.split(',')[1] || '';
+      resolve({ mediaType: file.type, data, name: file.name, previewUrl: dataUrl });
+    };
+    reader.onerror = () => reject(new Error('Không đọc được file ảnh'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function downloadFile(content, filename, type = 'text/plain') {
@@ -107,8 +120,16 @@ function App() {
 
   const skill = SKILLS[workspace.activeSkill];
   const testCases = workspace.output?.testCases || [];
+  const skipNextHistorySync = useRef(false);
 
   useEffect(() => {
+    // Chuyển skill sang tab khác (ví dụ nút "Viết Test Case →") load lại history
+    // của skill đó — nếu ta vừa chủ động điền input (SRS -> TC), bỏ qua 1 lần
+    // để không bị lịch sử cũ ghi đè lên giá trị vừa điền.
+    if (skipNextHistorySync.current) {
+      skipNextHistorySync.current = false;
+      return;
+    }
     const latest = skillHistory.runs[0] || null;
     setActiveHistoryId(latest?.id || null);
     workspace.setSkillInput(latest?.input || '');
@@ -224,10 +245,11 @@ function App() {
       if (r.action === 'modify') next[r.id] = 'apply';
       if (r.action === 'delete') next[r.id] = 'remove';
     });
-    setReviewDecisions(next);
     const nextSuggestions = {};
     (qualityReview?.newSuggestions || []).forEach((_, idx) => { nextSuggestions[idx] = true; });
+    setReviewDecisions(next);
     setNewSuggestionDecisions(nextSuggestions);
+    applyReviewSelections(next, nextSuggestions);
   }
 
   function keepAllOriginals() {
@@ -235,7 +257,7 @@ function App() {
     setNewSuggestionDecisions({});
   }
 
-  async function applyReviewSelections() {
+  async function applyReviewSelections(decisionsOverride = reviewDecisions, newSuggestionsOverride = newSuggestionDecisions) {
     if (!qualityReview || !projectTree.activeNodeId) return;
     const before = testCases.length;
     setLoading(true);
@@ -243,16 +265,18 @@ function App() {
       const final = buildFinalTestCases(
         testCases,
         qualityReview.reviews,
-        reviewDecisions,
-        newSuggestionDecisions,
+        decisionsOverride,
+        newSuggestionsOverride,
         qualityReview.newSuggestions,
         renumberNewCases,
       );
+      if (!Array.isArray(final)) throw new Error('Dữ liệu test case không hợp lệ');
       await saveTestCasesApi(projectTree.activeNodeId, final);
       workspace.setSkillOutput({ ...workspace.output, testCases: final, total: final.length });
       dismissReview();
       setToast(`Đã áp dụng thay đổi: ${before} → ${final.length} test case`);
     } catch (e) {
+      console.error('Apply review failed:', e, { reviewDecisions: decisionsOverride, newSuggestionDecisions: newSuggestionsOverride, final: e.final });
       setToast(`Lỗi áp dụng đánh giá: ${e.message}`);
     } finally {
       setLoading(false);
@@ -260,8 +284,9 @@ function App() {
   }
 
   async function generate() {
-    if (!workspace.input.trim()) {
-      setToast('Nhập nội dung trước');
+    const hasImage = Boolean(skill.supportsImage && workspace.image);
+    if (!workspace.input.trim() && !hasImage) {
+      setToast(skill.supportsImage ? 'Nhập nội dung hoặc upload ảnh trước' : 'Nhập nội dung trước');
       return;
     }
     dismissReview();
@@ -272,8 +297,9 @@ function App() {
         : await generateAiOutput({
             skill: workspace.activeSkill,
             systemPrompt: skill.system,
-            userPrompt: skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), workspace.options),
+            userPrompt: skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), { ...workspace.options, hasImage }),
             nodeId: projectTree.activeNodeId,
+            image: hasImage ? { mediaType: workspace.image.mediaType, data: workspace.image.data } : undefined,
           });
 
       const parsed = skill.output === 'testcase' ? parseAiJson(generated.output) : stripCodeFence(generated.output);
@@ -348,6 +374,51 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     } finally {
       setLoading(false);
     }
+  }
+
+  function sendSrsToTestCase() {
+    const srsText = workspace.output || workspace.rawOutput;
+    if (!srsText) return;
+    skipNextHistorySync.current = true;
+    workspace.setSkillInput(String(srsText), 'testcase');
+    workspace.setActiveSkill('testcase');
+    setToast('Đã chuyển SRS sang Test Cases — bấm Generate để sinh test case');
+  }
+
+  async function handleImageUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const payload = await fileToImagePayload(file);
+      workspace.setSkillImage(payload);
+    } catch (e) {
+      setToast(`Lỗi upload ảnh: ${e.message}`);
+    }
+  }
+
+  async function handleRequirementPaste(event) {
+    if (!skill.supportsImage) return;
+    const items = event.clipboardData?.items || [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        event.preventDefault();
+        try {
+          const payload = await fileToImagePayload(file);
+          workspace.setSkillImage(payload);
+          setToast('Đã dán ảnh từ clipboard');
+        } catch (e) {
+          setToast(`Lỗi dán ảnh: ${e.message}`);
+        }
+        return;
+      }
+    }
+  }
+
+  function removeImage() {
+    workspace.setSkillImage(null);
   }
 
   function copyManualPrompt() {
@@ -578,11 +649,27 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 <button className="btn-secondary" onClick={copyManualPrompt}>Copy Manual Prompt</button>
               </div>
             )}
+            {skill.supportsImage && (
+              <div className="image-upload-row">
+                <label className="btn-secondary image-upload-btn">
+                  Upload ảnh (wireframe/mockup/screenshot)
+                  <input type="file" accept="image/*" onChange={handleImageUpload} hidden />
+                </label>
+                {workspace.image && (
+                  <div className="image-preview-chip">
+                    <img src={workspace.image.previewUrl} alt={workspace.image.name} className="image-preview-thumb" />
+                    <span className="image-preview-name">{workspace.image.name}</span>
+                    <button className="btn-secondary" onClick={removeImage}>Xóa ảnh</button>
+                  </div>
+                )}
+              </div>
+            )}
             <textarea
               className="pf-textarea requirement-input"
               value={workspace.input}
               onChange={e => workspace.setSkillInput(e.target.value)}
-              placeholder="Dán spec / report / flow vào đây..."
+              onPaste={handleRequirementPaste}
+              placeholder={skill.supportsImage ? 'Dán mô tả requirement, hoặc Ctrl+V để dán ảnh trực tiếp (tùy chọn nếu đã upload ảnh)...' : 'Dán spec / report / flow vào đây...'}
             />
             {workspace.activeSkill === 'testcase' && testCases.length > 0 && (
               <div className="supplement-row">
@@ -617,6 +704,11 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={() => exportOutput('md')} disabled={!testCases.length}>MD</button>}
                 {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={copyForLark} disabled={!testCases.length}>Copy Lark</button>}
                 <button className="btn-secondary" onClick={() => exportOutput()} disabled={!workspace.output && !workspace.rawOutput}>Export</button>
+                {workspace.activeSkill === 'srs' && (workspace.output || workspace.rawOutput) && (
+                  <button className="btn-primary" onClick={sendSrsToTestCase} title="Chuyển nội dung SRS sang skill Test Cases">
+                    Viết Test Case →
+                  </button>
+                )}
                 {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && testCases.length > 0 && (
                   <button className="btn-secondary" onClick={openLarkPushModal} disabled={pushingToLark} title="Xác nhận link Lark Base rồi đẩy các test case đã duyệt lên">
                     {pushingToLark ? 'Đang đẩy...' : 'Đẩy lên Lark'}

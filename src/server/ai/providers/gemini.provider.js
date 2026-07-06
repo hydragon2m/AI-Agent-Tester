@@ -1,11 +1,15 @@
-async function callGemini(systemPrompt, userContent, key, retryCount = 0) {
+async function callGemini(systemPrompt, userContent, key, retryCount = 0, image) {
   const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
   const model = MODELS[Math.min(retryCount, MODELS.length - 1)];
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
+  const parts = image
+    ? [{ inline_data: { mime_type: image.mediaType, data: image.data } }, { text: userContent }]
+    : [{ text: userContent }];
+
   const body = {
     system_instruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userContent }] }],
+    contents: [{ role: 'user', parts }],
     generationConfig: { temperature: 0.4, maxOutputTokens: 8192 }
   };
 
@@ -25,7 +29,7 @@ async function callGemini(systemPrompt, userContent, key, retryCount = 0) {
     if (isRetryable && retryCount < MODELS.length - 1) {
       console.log(`[Gemini Provider] Retrying model ${MODELS[retryCount + 1]}...`);
       await new Promise(r => setTimeout(r, 1500));
-      return callGemini(systemPrompt, userContent, key, retryCount + 1);
+      return callGemini(systemPrompt, userContent, key, retryCount + 1, image);
     }
     const isQuota = res.status === 429 || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED');
     throw new Error(isQuota ? 'QUOTA_EXCEEDED' : errMsg);

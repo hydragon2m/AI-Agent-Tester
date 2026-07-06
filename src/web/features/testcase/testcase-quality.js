@@ -63,10 +63,24 @@ ${JSON.stringify(testCases, null, 2)}
 Hãy đánh giá từng test case theo đúng schema đã yêu cầu.`;
 }
 
+function normalizeStepsValue(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null) return [];
+  const text = typeof value === 'string' ? value : String(value);
+  return text
+    .split(/\r?\n/)
+    .map(line => line.replace(/^\s*\d+[.)]?\s*/, '').trim())
+    .filter(line => line.length > 0);
+}
+
 function applyChanges(testCase, changes) {
   const updated = { ...testCase };
   for (const change of changes || []) {
     if (!REVIEWABLE_FIELDS.includes(change.field)) continue;
+    if (change.field === 'steps') {
+      updated.steps = normalizeStepsValue(change.newValue);
+      continue;
+    }
     updated[change.field] = change.newValue;
   }
   return updated;

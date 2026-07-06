@@ -10,7 +10,7 @@ const PROVIDER_META = {
 
 const { getActiveKey } = require('./provider.service');
 
-async function callAI(systemPrompt, userContent) {
+async function callAI(systemPrompt, userContent, image) {
   // Query DB keys first, fall back to environment variables
   const dbGeminiKey = await getActiveKey('gemini');
   const dbClaudeKey = await getActiveKey('claude');
@@ -45,9 +45,9 @@ async function callAI(systemPrompt, userContent) {
       let result;
       const key = providers[provider].key;
 
-      if (provider === 'gemini') result = await callGemini(systemPrompt, userContent, key);
-      else if (provider === 'claude') result = await callClaude(systemPrompt, userContent, key);
-      else if (provider === 'openai') result = await callOpenAI(systemPrompt, userContent, key);
+      if (provider === 'gemini') result = await callGemini(systemPrompt, userContent, key, 0, image);
+      else if (provider === 'claude') result = await callClaude(systemPrompt, userContent, key, image);
+      else if (provider === 'openai') result = await callOpenAI(systemPrompt, userContent, key, 0, image);
 
       return {
         provider,

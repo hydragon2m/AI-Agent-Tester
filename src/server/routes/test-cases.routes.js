@@ -63,8 +63,8 @@ router.post('/:nodeId', async (req, res) => {
     }));
     res.json(mapped);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Failed to save test cases' });
+    console.error('Failed to save test cases:', e);
+    res.status(500).json({ error: e.message || 'Failed to save test cases', details: e.stack || '' });
   }
 });
 

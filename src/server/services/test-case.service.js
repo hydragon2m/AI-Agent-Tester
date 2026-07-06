@@ -10,6 +10,84 @@ function sanitizeAbbreviation(name) {
   return letters || 'TC';
 }
 
+const TYPE_MAP = {
+  positive: 'Positive',
+  negative: 'Negative',
+  boundary: 'Boundary',
+  'edge case': 'Edge Case',
+  edge: 'Edge Case',
+  security: 'Security',
+  'ui/ux': 'UI/UX',
+  uiux: 'UI/UX',
+  ui: 'UI/UX',
+};
+const PRIORITY_MAP = {
+  high: 'High',
+  medium: 'Medium',
+  med: 'Medium',
+  low: 'Low',
+};
+const SUITE_MAP = {
+  smoke: 'Smoke',
+  regression: 'Regression',
+  'new feature': 'New Feature',
+  exploratory: 'Exploratory',
+  'new-feature': 'New Feature',
+};
+const AUTOMATION_MAP = {
+  yes: 'Yes',
+  no: 'No',
+};
+
+function normalizeEnum(value, map, defaultValue) {
+  if (typeof value !== 'string') return defaultValue;
+  const key = value.trim().toLowerCase();
+  return map[key] || defaultValue;
+}
+
+function normalizeString(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+function normalizeSteps(steps) {
+  if (Array.isArray(steps)) return steps.map(item => normalizeString(item));
+  if (steps == null) return [];
+  const text = typeof steps === 'string' ? steps : String(steps);
+  return text
+    .split(/\r?\n/)
+    .map(line => line.replace(/^\s*\d+[.)]?\s*/, '').trim())
+    .filter(line => line.length > 0);
+}
+
+function normalizeTestCase(tc) {
+  if (!tc || typeof tc !== 'object') return { steps: [] };
+  return {
+    id: normalizeString(tc.id),
+    externalId: normalizeString(tc.externalId) || null,
+    module: normalizeString(tc.module),
+    name: normalizeString(tc.name),
+    type: normalizeEnum(tc.type, TYPE_MAP, 'Positive'),
+    priority: normalizeEnum(tc.priority, PRIORITY_MAP, 'Medium'),
+    suite: normalizeEnum(tc.suite, SUITE_MAP, 'Regression'),
+    automationCandidate: normalizeEnum(tc.automationCandidate, AUTOMATION_MAP, 'Yes'),
+    traceTo: normalizeString(tc.traceTo),
+    preconditions: normalizeString(tc.preconditions),
+    steps: normalizeSteps(tc.steps),
+    testData: normalizeString(tc.testData),
+    expectedResult: normalizeString(tc.expectedResult),
+    status: normalizeString(tc.status),
+    actualResult: normalizeString(tc.actualResult),
+    relatedBug: normalizeString(tc.relatedBug),
+  };
+}
+
 // Scopes TC ID numbering to the module a node belongs to: same prefix, one
 // shared counter across every screen/feature under that module, so IDs never
 // collide within the module even when generated from different features.
@@ -98,10 +176,12 @@ async function saveTestCases(nodeId, newTCs, replace = false) {
     }
   }
 
-  await assignModuleScopedIds(nodeId, newTCs);
+  const normalizedTCs = newTCs.map(normalizeTestCase);
+  await assignModuleScopedIds(nodeId, normalizedTCs);
 
-  for (const tc of newTCs) {
-    const stepsJson = JSON.stringify(tc.steps || []);
+  for (const tc of normalizedTCs) {
+    const normalizedSteps = normalizeSteps(tc.steps);
+    const stepsJson = JSON.stringify(normalizedSteps);
     const nowStr = new Date().toISOString();
 
     const existing = await dbGet('SELECT * FROM test_cases WHERE id = ?', [tc.id]);
@@ -129,10 +209,10 @@ async function saveTestCases(nodeId, newTCs, replace = false) {
               tc.externalId || null,
               tc.module || '',
               tc.name,
-              tc.type || 'Positive',
-              tc.priority || 'Medium',
-              tc.suite || 'Regression',
-              tc.automationCandidate || 'Yes',
+              tc.type,
+              tc.priority,
+              tc.suite,
+              tc.automationCandidate,
               tc.traceTo || '',
               tc.preconditions || '',
               stepsJson,
@@ -180,10 +260,10 @@ async function saveTestCases(nodeId, newTCs, replace = false) {
               tc.externalId || null,
               tc.module || '',
               tc.name,
-              tc.type || 'Positive',
-              tc.priority || 'Medium',
-              tc.suite || 'Regression',
-              tc.automationCandidate || 'Yes',
+              tc.type,
+              tc.priority,
+              tc.suite,
+              tc.automationCandidate,
               tc.traceTo || '',
               tc.preconditions || '',
               stepsJson,
@@ -204,8 +284,8 @@ async function saveTestCases(nodeId, newTCs, replace = false) {
           [
               tc.id,
               tc.name,
-              tc.type || 'Positive',
-              tc.priority || 'Medium',
+              tc.type,
+              tc.priority,
               tc.preconditions || '',
               stepsJson,
               tc.expectedResult || '',

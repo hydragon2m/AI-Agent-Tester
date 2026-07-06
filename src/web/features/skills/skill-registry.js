@@ -1,4 +1,120 @@
 export const SKILLS = {
+  srs: {
+    label: 'SRS',
+    desc: 'Đặc tả từ text/ảnh',
+    icon: 'SRS',
+    output: 'markdown',
+    supportsImage: true,
+    system: `Bạn là Senior Business Analyst kiêm Technical Writer 10+ năm kinh nghiệm, chuyên viết tài liệu đặc tả phần mềm (SRS) theo chuẩn IEEE 830, cho các sản phẩm fintech, travel-tech và SaaS.
+Nhiệm vụ: chuyển hóa input thô (text mô tả, ảnh wireframe/mockup/screenshot, hoặc cả hai) thành 1 tài liệu SRS đủ chi tiết để một QA Engineer viết được test case mà không cần hỏi thêm.
+
+NGUYÊN TẮC CỐT LÕI: Tài liệu SRS tốt = QA không cần hỏi thêm gì mới viết được test case. Chỗ không đủ thông tin phải ghi vào "Điểm chưa rõ" thay vì bịa hoặc bỏ qua.
+
+QUY TẮC BẮT BUỘC:
+1. Chỉ trả về markdown, không thêm giải thích ngoài tài liệu, không dùng markdown fences.
+2. KHÔNG bịa thông tin không có trong input. Chỗ không đủ thông tin → ghi "[CẦN XÁC NHẬN]" kèm giải thích rõ cần xác nhận điều gì, và thêm dòng tương ứng vào phần "Điểm chưa rõ".
+3. KHÔNG dùng ngôn ngữ mơ hồ như "hệ thống sẽ xử lý phù hợp", "thực hiện đúng cách" — phải có con số, trạng thái, điều kiện cụ thể.
+4. Nếu input là ảnh wireframe/mockup: mô tả CHI TIẾT từng element nhìn thấy — không bỏ sót field, nút, label, badge, icon, tooltip nào. Nếu input CHỈ có ảnh (không có text), phải đọc kỹ ảnh để tự suy luận toàn bộ luồng và yêu cầu.
+5. Mọi Acceptance Criteria viết theo format: "GIVEN <điều kiện ban đầu> WHEN <hành động> THEN <kết quả mong đợi>".
+6. Mọi Business Rule có mã định danh BR-XXX-001 để QA trace được. Mọi Functional Requirement có mã FR-XXX-001 (XXX = viết tắt tên feature, ví dụ FR-FT-001 cho Fast Track).
+7. Phân loại rõ functional requirement vs non-functional requirement.
+8. Cuối tài liệu luôn có phần "9. Checklist cho QA" — liệt kê cụ thể từng điểm QA cần đặc biệt chú ý khi viết TC, không viết chung chung kiểu "kiểm tra đầy đủ các trường hợp".
+9. Ngôn ngữ output: Tiếng Việt, thuật ngữ kỹ thuật giữ nguyên tiếng Anh.
+10. Khi suy luận yêu cầu ẩn (validation, edge case không có trong input gốc) → gắn tag "[SUY LUẬN]" trước AC/BR đó để phân biệt với yêu cầu hiển nhiên có trong input.
+11. Được dùng bảng markdown (| a | b |) — renderer đã hỗ trợ render bảng, dùng bảng cho danh sách element UI, KPI, "Điểm chưa rõ".
+
+BƯỚC 0 — KIỂM TRA INPUT ĐỦ HAY QUÁ MƠ HỒ (làm trước khi viết SRS):
+Input ĐỦ để viết SRS khi thỏa ít nhất 1 trong 3 điều kiện: có ≥3 câu mô tả nghiệp vụ cụ thể (field/action/trạng thái rõ ràng), HOẶC có ảnh wireframe/mockup/screenshot cho thấy UI elements rõ ràng, HOẶC có ảnh + text bổ sung cho nhau.
+Input QUÁ MƠ HỒ khi: chỉ có 1-2 câu chung chung không đề cập field/action cụ thể nào (ví dụ "Tính năng quản lý sản phẩm"), hoặc chỉ có tên tính năng mà không mô tả gì thêm.
+Nếu input quá mơ hồ → KHÔNG viết SRS ngay. Thay vào đó, chỉ trả về danh sách ít nhất 3 câu hỏi cụ thể cần hỏi lại user trước khi viết được SRS, ví dụ: (1) Actor chính là ai? (2) Các thao tác chính là gì? (3) Có ràng buộc nghiệp vụ đặc biệt nào không (phân quyền, trạng thái, validation)? — Không viết bất kỳ section nào của SRS trong trường hợp này.
+
+INPUT TYPE — cách xử lý:
+- text: bóc tách yêu cầu hiển (nêu rõ) và ẩn (ngầm hiểu, gắn "[SUY LUẬN]").
+- image: liệt kê TOÀN BỘ element nhìn thấy, suy luận behavior từ UI pattern, phần 5 (UI/UX) phải có bảng element đầy đủ, phần 6 (API) chỉ ghi 1 dòng "Chưa có thông tin API — cần bổ sung sau khi dev thiết kế endpoint", không bịa API contract.
+- mixed (ảnh + text): ưu tiên ảnh cho UI detail (element, layout, label), ưu tiên text cho business logic (validation, trạng thái, quyền). Khi ảnh và text mâu thuẫn → ghi vào "Điểm chưa rõ", nêu rõ mâu thuẫn.
+
+MỨC ĐỘ CHI TIẾT (detail level):
+- concise: feature nhỏ, 1 màn hình, ít logic → 1-3 trang, chỉ gồm section 1, 3, 5 (nếu có ảnh), 8, 9 — bỏ section 2.3, 4, 6, 7.
+- full (mặc định): module phức tạp, nhiều màn hình, nhiều trạng thái → đầy đủ cả 9 section.
+Nếu input chỉ mô tả 1 form đơn giản (ví dụ form đăng nhập) dù user chọn "full" → tự động chuyển sang concise và ghi rõ ở đầu tài liệu: "[Tự động chuyển sang detail level: concise vì input chỉ mô tả 1 form đơn giản]".
+
+DOMAIN CONTEXT — state machine mặc định theo domain (chỉ áp dụng cho section 2.3 nếu feature có entity đổi trạng thái):
+- fast-track: pending → confirmed → checked-in → completed / cancelled (có hủy + hoàn tiền, có mã QR).
+- transfer: pending → confirmed → assigned → picked-up → completed / cancelled (có tài xế, có tracking).
+- esim: draft → active → expired / suspended (có kích hoạt, có hạn sử dụng, có thu hồi).
+- general: không áp dụng state machine mặc định, suy luận từ input.
+Nếu user không chỉ định domain → dùng general. Nếu nhận ra domain từ ngữ cảnh input (ví dụ nhắc "sân bay", "eSIM") → tự detect và ghi rõ trong section 1.4: "Domain detected: <domain>". Nếu input mâu thuẫn với state machine mặc định của domain → ưu tiên input, ghi mâu thuẫn vào "Điểm chưa rõ".
+
+CẤU TRÚC TÀI LIỆU CỐ ĐỊNH (giữ đúng số thứ tự, đúng tên heading; ở detail level concise chỉ viết các section được chỉ định ở trên, các section còn lại bỏ qua hoàn toàn không cần ghi placeholder):
+## 1. Tổng quan
+### 1.1 Mục tiêu
+### 1.2 Phạm vi
+### 1.3 Actor & Role
+Nếu input không nêu rõ role → liệt kê role phổ biến nhất, gắn "[CẦN XÁC NHẬN]" cho role không chắc chắn.
+### 1.4 Giả định & Ràng buộc
+Ghi rõ những gì bạn giả định khi viết SRS (ví dụ "Giả định user đã đăng nhập"). Nếu detect được domain, ghi "Domain detected: <domain>" ở đây.
+## 2. Luồng chức năng
+### 2.1 Happy path (luồng chính)
+Viết dạng numbered steps, mỗi step 1 hành động.
+### 2.2 Luồng phụ / ngoại lệ
+Liệt kê ít nhất 3 exception flow (lỗi mạng, validation fail, quyền không đủ).
+### 2.3 Sơ đồ trạng thái (nếu có — bỏ qua ở level concise)
+Chỉ viết khi feature có entity đổi trạng thái (booking, order...). Dùng text diagram dạng "A → B → C".
+## 3. Yêu cầu chức năng (Functional Requirements)
+### 3.1 [Nhóm chức năng]
+#### FR-XXX-001: [Tên yêu cầu]
+**Mô tả:** ...
+**Acceptance Criteria:**
+- GIVEN [điều kiện ban đầu] WHEN [hành động xảy ra] THEN [kết quả mong đợi]
+**Business Rules:**
+- BR-XXX-001: [Quy tắc nghiệp vụ cụ thể, có con số/điều kiện rõ ràng]
+## 4. Yêu cầu phi chức năng (bỏ qua ở level concise)
+### 4.1 Performance
+### 4.2 Security
+### 4.3 Usability / UX
+### 4.4 Compatibility
+## 5. Đặc tả UI/UX (khi có hình ảnh hoặc mô tả màn hình rõ ràng)
+### 5.1 Danh sách màn hình
+### 5.2 Đặc tả từng màn hình
+Với mỗi màn hình, dùng bảng markdown liệt kê TẤT CẢ element nhìn thấy (kể cả checkbox, icon, badge, tooltip):
+| Element | Kiểu | Bắt buộc | Validation | Ghi chú |
+|---------|------|----------|------------|---------|
+Cột Validation ghi rõ rule (min/max length, format, allowed values) — nếu không biết ghi "[CẦN XÁC NHẬN]".
+**Behavior:** mô tả behavior khi tương tác.
+**Error states:** các trạng thái lỗi và message tương ứng.
+## 6. Đặc tả tích hợp & API (bỏ qua nếu input chỉ có ảnh UI, ở level concise)
+### 6.1 External dependencies
+### 6.2 API contracts (tóm tắt)
+Nếu input có mô tả API (endpoint, method, payload) → viết tóm tắt contract. Nếu không → ghi "Chưa có thông tin API — cần bổ sung sau khi dev thiết kế endpoint". KHÔNG bịa endpoint.
+### 6.3 Data flow
+## 7. Glossary (bỏ qua ở level concise)
+Bảng "Thuật ngữ | Định nghĩa" cho các thuật ngữ nghiệp vụ/kỹ thuật xuất hiện trong tài liệu.
+## 8. Điểm chưa rõ — Cần xác nhận
+Đây là phần giá trị nhất — dùng bảng markdown, xếp theo mức ảnh hưởng (business-critical trước, UI minor sau):
+| # | Nội dung cần xác nhận | Ảnh hưởng đến | Người cần hỏi |
+|---|------------------------|----------------|-----------------|
+## 9. Checklist cho QA
+Danh sách "- [ ] ..." cụ thể từng điểm cần test (ưu tiên boundary value, negative case, security trước; UI cosmetic sau). Mỗi item tương ứng 1 hoặc vài TC cụ thể.`,
+    buildPrompt(input, context, options = {}) {
+      const hasImage = options.hasImage;
+      const trimmedInput = (input || '').trim();
+      const detailLevel = options.detailLevel === 'concise' ? 'concise' : 'full';
+      return `${context}
+
+INPUT CẦN PHÂN TÍCH:
+---
+${trimmedInput || '(Không có mô tả text — chỉ có ảnh đính kèm, hãy đọc kỹ ảnh để suy luận toàn bộ yêu cầu)'}
+---
+${hasImage ? 'Input có kèm 1 ảnh wireframe/mockup/screenshot — dùng ảnh này làm nguồn chính cho phần Đặc tả UI/UX.' : ''}
+${options.domain?.trim() ? `Domain / Ngữ cảnh nghiệp vụ do user chỉ định: ${options.domain.trim()}.` : 'Domain: user không chỉ định — tự detect từ ngữ cảnh input theo bảng domain trong system prompt, nếu không nhận diện được thì dùng general.'}
+
+Yêu cầu output:
+- Trước tiên áp dụng Bước 0 (kiểm tra input đủ hay quá mơ hồ) — nếu quá mơ hồ, CHỈ trả về danh sách câu hỏi cần hỏi lại, không viết SRS.
+- Nếu input đủ: viết SRS đầy đủ theo đúng cấu trúc 9 section đã quy định trong system prompt.
+- Mức độ chi tiết do user chọn: ${detailLevel === 'concise' ? 'concise (ngắn gọn — chỉ section 1, 3, 5 nếu có ảnh, 8, 9).' : 'full (đầy đủ 9 section), nhưng tự chuyển sang concise nếu input chỉ mô tả 1 form đơn giản (nêu rõ lý do nếu tự chuyển).'}
+- Ngôn ngữ: Tiếng Việt (thuật ngữ kỹ thuật giữ nguyên tiếng Anh).`;
+    },
+  },
   testcase: {
     label: 'Test Cases',
     desc: 'Sinh testcase ISTQB',
@@ -200,6 +316,13 @@ Lên kế hoạch performance test đầy đủ theo đúng cấu trúc đã yê
 };
 
 export const EXAMPLES = {
+  srs: `Tính năng: Đặt Fast Track tại sân bay.
+
+User là khách hàng đã đăng nhập.
+Chọn sân bay (danh sách 10 sân bay Việt Nam), chọn ngày giờ bay, chọn số lượng người (1-10).
+Xem giá, thanh toán qua Momo hoặc thẻ Visa.
+Sau khi thanh toán thành công: nhận email và SMS xác nhận kèm mã QR.
+Có thể hủy trước 24h, hoàn 70% phí.`,
   testcase: `Tính năng: Đăng nhập hệ thống
 
 - Người dùng nhập email và mật khẩu để đăng nhập
@@ -228,6 +351,90 @@ SLA: P95 < 2s, error rate < 0.1%, chịu 500 concurrent users.`,
 };
 
 export const DEMO_OUTPUTS = {
+  srs: `## 1. Tổng quan
+### 1.1 Mục tiêu
+Cho phép khách hàng đã đăng nhập tự đặt dịch vụ Fast Track tại sân bay và thanh toán trực tuyến.
+### 1.2 Phạm vi
+Đặt dịch vụ, thanh toán, xác nhận, hủy/hoàn tiền. Không bao gồm quản trị vận hành phía đối tác sân bay.
+### 1.3 Actor & Role
+Khách hàng (đã đăng nhập).
+### 1.4 Giả định & Ràng buộc
+Giả định user đã đăng nhập trước khi vào luồng đặt Fast Track. Domain detected: fast-track.
+[CẦN XÁC NHẬN] Danh sách chính xác 10 sân bay chưa được cung cấp.
+
+## 2. Luồng chức năng
+### 2.1 Happy path (luồng chính)
+1. User chọn sân bay từ dropdown.
+2. User chọn ngày giờ bay và số lượng người (1-10).
+3. User xem giá và chọn phương thức thanh toán (Momo hoặc Visa).
+4. Thanh toán thành công → booking chuyển "confirmed", gửi email + SMS kèm mã QR.
+### 2.2 Luồng phụ / ngoại lệ
+- [SUY LUẬN] Mất kết nối khi thanh toán → giữ booking ở "pending", cho phép thử lại.
+- Validation ngày giờ bay không hợp lệ (quá khứ/sát giờ) → chặn submit, hiển thị lỗi.
+- [SUY LUẬN] Cổng thanh toán từ chối giao dịch → hiển thị lý do, không tạo booking "confirmed".
+### 2.3 Sơ đồ trạng thái
+pending → confirmed → checked-in → completed / cancelled (state machine mặc định domain fast-track).
+
+## 3. Yêu cầu chức năng (Functional Requirements)
+### 3.1 Đặt chuyến
+#### FR-FT-001: Chọn thông tin chuyến bay
+**Mô tả:** User chọn sân bay, ngày giờ bay, số lượng người trước khi thanh toán.
+**Acceptance Criteria:**
+- GIVEN user đã đăng nhập WHEN chọn sân bay từ dropdown THEN hiển thị danh sách sân bay hợp lệ
+- GIVEN user chọn ngày bay WHEN ngày nhỏ hơn ngày hiện tại + 2 giờ THEN chặn submit và hiển thị lỗi
+**Business Rules:**
+- BR-FT-001: Ngày bay không được nhỏ hơn ngày hiện tại + 2 giờ
+- BR-FT-002: Số lượng người từ 1 đến 10
+
+### 3.2 Thanh toán
+#### FR-FT-002: Thanh toán và xác nhận
+**Mô tả:** User thanh toán qua Momo hoặc thẻ Visa.
+**Acceptance Criteria:**
+- GIVEN booking đã tạo WHEN thanh toán thành công THEN chuyển trạng thái booking sang "confirmed" và gửi email + SMS kèm mã QR
+- GIVEN booking đã tạo WHEN thanh toán thất bại THEN giữ trạng thái "pending" và cho phép thử lại
+**Business Rules:**
+- BR-FT-003: [CẦN XÁC NHẬN] Booking "pending" quá bao lâu không thanh toán thì bị tự hủy — mốc thời gian cụ thể chưa được cung cấp
+
+## 4. Yêu cầu phi chức năng
+### 4.1 Performance
+[CẦN XÁC NHẬN] Chưa có SLA cụ thể cho thời gian phản hồi thanh toán.
+### 4.2 Security
+Không lưu thông tin thẻ thanh toán trên hệ thống, chuyển tiếp qua cổng thanh toán.
+### 4.3 Usability / UX
+[CẦN XÁC NHẬN] Không có wireframe/mockup, phần này chỉ suy luận từ mô tả text.
+### 4.4 Compatibility
+[CẦN XÁC NHẬN] Chưa có thông tin về nền tảng (web/app) và trình duyệt/OS cần hỗ trợ.
+
+## 5. Đặc tả UI/UX
+[CẦN XÁC NHẬN] Không có wireframe/mockup đính kèm, phần này chỉ suy luận từ mô tả text nên chưa có bảng element chi tiết.
+
+## 6. Đặc tả tích hợp & API
+### 6.1 External dependencies
+Cổng thanh toán Momo, cổng thanh toán Visa, dịch vụ gửi email/SMS.
+### 6.2 API contracts (tóm tắt)
+Chưa có thông tin API — cần bổ sung sau khi dev thiết kế endpoint.
+### 6.3 Data flow
+[CẦN XÁC NHẬN] Chưa rõ hệ thống nào phát hành mã QR (nội bộ hay đối tác sân bay).
+
+## 7. Glossary
+| Thuật ngữ | Định nghĩa |
+|-----------|-----------|
+| Fast Track | Dịch vụ ưu tiên làm thủ tục tại sân bay |
+| Booking | Đơn đặt dịch vụ Fast Track của user |
+
+## 8. Điểm chưa rõ — Cần xác nhận
+| # | Nội dung cần xác nhận | Ảnh hưởng đến | Người cần hỏi |
+|---|------------------------|----------------|-----------------|
+| 1 | Danh sách chính xác 10 sân bay | Dropdown chọn sân bay (FR-FT-001) | Product Owner |
+| 2 | Mốc thời gian tự hủy booking "pending" | BR-FT-003 | Product Owner |
+| 3 | Nền tảng/trình duyệt cần hỗ trợ | Section 4.4 Compatibility | Product Owner |
+
+## 9. Checklist cho QA
+- [ ] Kiểm tra boundary số lượng người (0, 1, 10, 11)
+- [ ] Kiểm tra validation ngày giờ bay quá khứ / sát giờ
+- [ ] Kiểm tra luồng hủy và hoàn tiền 70%
+- [ ] Kiểm tra booking "pending" khi thanh toán thất bại/timeout
+- [ ] Kiểm tra không có thông tin thẻ thanh toán bị lưu/log lại phía hệ thống`,
   testcase: JSON.stringify({
     summary: 'Demo test cases cho đăng nhập',
     total: 3,

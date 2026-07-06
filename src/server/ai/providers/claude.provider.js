@@ -1,4 +1,11 @@
-async function callClaude(systemPrompt, userContent, key) {
+async function callClaude(systemPrompt, userContent, key, image) {
+  const content = image
+    ? [
+        { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } },
+        { type: 'text', text: userContent },
+      ]
+    : userContent;
+
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -10,7 +17,7 @@ async function callClaude(systemPrompt, userContent, key) {
       model: 'claude-3-5-sonnet-latest',
       max_tokens: 8192,
       system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
+      messages: [{ role: 'user', content }],
     }),
   });
 

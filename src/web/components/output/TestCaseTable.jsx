@@ -24,7 +24,7 @@ export function TestCaseTable({ testCases }) {
               <td><span className={`tc-badge type-${String(tc.type || '').toLowerCase().replace(/\W+/g, '-')}`}>{tc.type}</span></td>
               <td><span className={`tc-badge prio-${String(tc.priority || '').toLowerCase()}`}>{tc.priority}</span></td>
               <td>{tc.suite || '-'}</td>
-              <td>{(tc.steps || []).map((step, i) => <div key={i}>{i + 1}. {String(step).replace(/^\s*\d+[.)]\s*/, '')}</div>)}</td>
+              <td>{(Array.isArray(tc.steps) ? tc.steps : String(tc.steps || '').split(/\r?\n/).filter(Boolean)).map((step, i) => <div key={i}>{i + 1}. {String(step).replace(/^\s*\d+[.)]\s*/, '')}</div>)}</td>
               <td>{tc.expectedResult}</td>
             </tr>
           ))}

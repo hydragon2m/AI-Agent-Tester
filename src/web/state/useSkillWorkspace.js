@@ -5,20 +5,28 @@ export function useSkillWorkspace() {
   const [inputs, setInputs] = useState({});
   const [outputs, setOutputs] = useState({});
   const [rawOutputs, setRawOutputs] = useState({});
+  const [images, setImages] = useState({});
   const [options, setOptions] = useState({
     priority: 'High',
     types: ['Positive', 'Negative', 'Boundary', 'Edge Case'],
     apiFormat: 'postman',
     browser: 'chromium',
     language: 'typescript',
+    domain: '',
+    detailLevel: 'full',
   });
 
   const input = inputs[activeSkill] || '';
   const output = outputs[activeSkill] || null;
   const rawOutput = rawOutputs[activeSkill] || '';
+  const image = images[activeSkill] || null;
 
-  function setSkillInput(value) {
-    setInputs(prev => ({ ...prev, [activeSkill]: value }));
+  function setSkillInput(value, skillKey = activeSkill) {
+    setInputs(prev => ({ ...prev, [skillKey]: value }));
+  }
+
+  function setSkillImage(value, skillKey = activeSkill) {
+    setImages(prev => ({ ...prev, [skillKey]: value }));
   }
 
   function setSkillOutput(value, raw = value, skillKey = activeSkill) {
@@ -41,10 +49,13 @@ export function useSkillWorkspace() {
     output,
     rawOutput,
     outputs,
+    image,
+    images,
     options,
     setOptions,
     setSkillInput,
     setSkillOutput,
+    setSkillImage,
     clearSkillOutput,
   };
 }

@@ -1,6 +1,13 @@
-async function callOpenAI(systemPrompt, userContent, key, retryCount = 0) {
+async function callOpenAI(systemPrompt, userContent, key, retryCount = 0, image) {
   const MODELS = ['gpt-4o', 'gpt-4o-mini'];
   const model = MODELS[Math.min(retryCount, MODELS.length - 1)];
+
+  const userMessageContent = image
+    ? [
+        { type: 'text', text: userContent },
+        { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}` } },
+      ]
+    : userContent;
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -14,7 +21,7 @@ async function callOpenAI(systemPrompt, userContent, key, retryCount = 0) {
       temperature: 0.4,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
+        { role: 'user', content: userMessageContent },
       ],
     }),
   });
@@ -26,7 +33,7 @@ async function callOpenAI(systemPrompt, userContent, key, retryCount = 0) {
     if (isRetryable && retryCount < MODELS.length - 1) {
       console.log(`[OpenAI Provider] Retrying model ${MODELS[retryCount + 1]}...`);
       await new Promise(r => setTimeout(r, 1500));
-      return callOpenAI(systemPrompt, userContent, key, retryCount + 1);
+      return callOpenAI(systemPrompt, userContent, key, retryCount + 1, image);
     }
     throw new Error(isRetryable ? 'QUOTA_EXCEEDED' : errMsg);
   }

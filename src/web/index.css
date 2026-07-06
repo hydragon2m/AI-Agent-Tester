@@ -576,6 +576,9 @@ select:focus, .config-item input:focus {
 .markdown-output blockquote { border-left: 3px solid var(--primary); padding-left: 12px; color: var(--text-muted); font-style: italic; }
 .markdown-output .checklist-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
 .markdown-output .checklist-item input { margin-top: 3px; }
+.markdown-output .md-table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 0.8rem; }
+.markdown-output .md-table th, .markdown-output .md-table td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.markdown-output .md-table th { color: var(--text-primary); background: var(--bg-dark); font-weight: 600; }
 
 /* === MODAL === */
 .modal-overlay {
@@ -1413,6 +1416,45 @@ select:focus, .config-item input:focus {
 }
 
 .supplement-row .btn-secondary { align-self: flex-end; }
+
+.image-upload-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.image-upload-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.image-preview-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-alt, rgba(255, 255, 255, 0.03));
+}
+
+.image-preview-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.image-preview-name {
+  font-size: 0.78rem;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .manual-prompt-preview {
   min-height: 180px;
