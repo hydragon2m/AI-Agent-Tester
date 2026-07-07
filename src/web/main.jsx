@@ -556,6 +556,27 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     setToast(`Đã sinh Test Case thành công cho ${successCount}/${childFeatures.length} Feature!`);
   }
 
+  function handleUpdateTestCases(updatedCases) {
+    workspace.setSkillOutput({
+      ...workspace.output,
+      testCases: updatedCases,
+      total: updatedCases.length
+    }, workspace.rawOutput, 'testcase');
+  }
+
+  async function handleSaveEditedTestCases() {
+    if (!projectTree.activeNodeId) return;
+    setLoading(true);
+    try {
+      await saveTestCasesApi(projectTree.activeNodeId, testCases);
+      setToast('Đã lưu các thay đổi của test case vào cơ sở dữ liệu!');
+    } catch (e) {
+      setToast(`Lỗi lưu test case: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleImageUpload(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -888,6 +909,11 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                   </button>
                 )}
                 {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && testCases.length > 0 && (
+                  <button className="btn-primary" onClick={handleSaveEditedTestCases} disabled={loading} title="Lưu lại toàn bộ chỉnh sửa test case của node này xuống cơ sở dữ liệu">
+                    {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
+                  </button>
+                )}
+                {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && testCases.length > 0 && (
                   <button className="btn-secondary" onClick={openLarkPushModal} disabled={pushingToLark} title="Xác nhận link Lark Base rồi đẩy các test case đã duyệt lên">
                     {pushingToLark ? 'Đang đẩy...' : 'Đẩy lên Lark'}
                   </button>
@@ -914,6 +940,7 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               onDismissReview={dismissReview}
               onSubmitClarifications={handleClarificationSubmit}
               loading={loading}
+              onUpdateTestCases={handleUpdateTestCases}
             />
           </section>
         </section>

@@ -62,7 +62,7 @@ function ClarificationForm({ questions, onSubmit, loading }) {
   );
 }
 
-export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading }) {
+export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading, onUpdateTestCases }) {
   if (!output && !rawOutput) return <div className="empty-state table-empty">Chưa có output.</div>;
   if (activeSkill === 'testcase') {
     return (
@@ -78,6 +78,7 @@ export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDeci
         onKeepAllReview={onKeepAllReview}
         onApplyReview={onApplyReview}
         onDismissReview={onDismissReview}
+        onUpdateTestCases={onUpdateTestCases}
       />
     );
   }
@@ -101,7 +102,7 @@ export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDeci
   );
 }
 
-function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview }) {
+function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onUpdateTestCases }) {
   if (!result?.testCases) return <CodeOutput value={rawOutput} />;
   const hasOverview = Boolean(result.summary) || result.assumptions?.length > 0 || result.openQuestions?.length > 0;
 
@@ -144,7 +145,7 @@ function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggest
             <span>Danh sách Test Case</span>
             <span className="output-count-badge">{result.testCases.length}</span>
           </div>
-          <TestCaseTable testCases={result.testCases} />
+          <TestCaseTable testCases={result.testCases} onUpdate={onUpdateTestCases} />
         </div>
       )}
     </div>
