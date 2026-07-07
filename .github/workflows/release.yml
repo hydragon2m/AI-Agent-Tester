@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - Hanh-test-
   workflow_dispatch:
 
 jobs:
