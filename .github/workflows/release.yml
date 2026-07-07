@@ -41,7 +41,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './prototype/src-tauri -> target'
+          workspaces: './src-tauri -> target'
 
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
@@ -51,7 +51,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: |
-          cd prototype
           npm ci
 
       - name: Build Tauri App
@@ -65,4 +64,4 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
-          projectPath: './prototype'
+          projectPath: '.'
