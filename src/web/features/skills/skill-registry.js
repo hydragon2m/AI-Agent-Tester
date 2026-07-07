@@ -317,6 +317,30 @@ ${input}
 Lên kế hoạch performance test đầy đủ theo đúng cấu trúc đã yêu cầu, có số liệu cụ thể bám sát input.`;
     },
   },
+  srsdecomposer: {
+    label: 'SRS Decomposer',
+    desc: 'Phân tách SRS thành các Feature con',
+    icon: 'DEC',
+    output: 'testcase',
+    system: `Bạn là Senior Business Analyst. Đọc tài liệu SRS được cung cấp và phân rã nó thành các tính năng (feature) con để viết test case riêng lẻ.
+Chỉ trả về DUY NHẤT 1 block JSON hợp lệ theo đúng schema sau, không giải thích ngoài JSON:
+[
+  {
+    "name": "Tên tính năng ngắn gọn (Ví dụ: Tìm kiếm sản phẩm, Lọc sản phẩm)",
+    "srsSegment": "Nội dung đặc tả Markdown chi tiết của riêng tính năng này được bóc tách từ tài liệu SRS gốc (bao gồm mô tả, Happy path/ngoại lệ liên quan, Acceptance Criteria và Business Rules của riêng tính năng đó)"
+  }
+]`,
+    buildPrompt(input, context) {
+      return `${context}
+
+TÀI LIỆU SRS CẦN PHÂN RÃ:
+---
+${input}
+---
+
+Hãy phân tách tài liệu SRS trên thành các feature con dưới dạng mảng JSON như yêu cầu.`;
+    },
+  },
 };
 
 export const EXAMPLES = {

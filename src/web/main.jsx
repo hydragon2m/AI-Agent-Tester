@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { generateAiOutput } from './backend-api/ai.api';
 import { fetchTestCases, saveTestCasesApi } from './backend-api/test-cases.api';
 import { fetchLarkLinkApi, linkLarkProjectApi, pushToLarkApi } from './backend-api/lark.api';
+import { createNodeApi } from './backend-api/nodes.api';
+import { createSkillRun, fetchSkillRuns } from './backend-api/skill-runs.api';
 import { SkillOptions } from './components/controls/SkillOptions';
 import { AppHeader } from './components/layout/AppHeader';
 import { ProjectSidebar } from './components/layout/ProjectSidebar';
@@ -95,6 +97,7 @@ function renumberNewCases(existingCases, newCases) {
 
 function App() {
   const [loading, setLoading] = useState(false);
+  const [batchGenLoading, setBatchGenLoading] = useState(false);
   const [toast, setToast] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
@@ -321,6 +324,9 @@ function App() {
       if (workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases) && parsed.testCases.length) {
         await runQualityCheck(parsed.testCases, workspace.input);
       }
+      if (workspace.activeSkill === 'srs' && projectTree.activeNode?.type === 'screen') {
+        await decomposeSrs(parsed, generated.provider);
+      }
     } catch (e) {
       setToast(`Lỗi: ${e.message}`);
     } finally {
@@ -422,12 +428,132 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
         workspace.setSkillOutput(parsed, generated.output);
         await saveSkillRun(nextRequirement, parsed, generated.output, generated.provider);
         setToast(`Đã cập nhật SRS bằng ${generated.provider}`);
+        if (projectTree.activeNode?.type === 'screen') {
+          await decomposeSrs(parsed, generated.provider);
+        }
       } catch (e) {
         setToast(`Lỗi: ${e.message}`);
       } finally {
         setLoading(false);
       }
     }, 50);
+  }
+
+  async function decomposeSrs(srsContent, provider) {
+    if (!projectTree.activeNodeId) return;
+    setToast('Đang phân tách SRS thành các Feature...');
+    try {
+      const systemPrompt = SKILLS.srsdecomposer.system;
+      const userPrompt = SKILLS.srsdecomposer.buildPrompt(srsContent, buildContext(projectTree.activePath));
+      
+      const generated = demoMode
+        ? { output: JSON.stringify([{ name: 'Quản lý sản phẩm con', srsSegment: '## Đặc tả con' }]), provider: 'demo' }
+        : await generateAiOutput({
+            skill: 'srsdecomposer',
+            systemPrompt,
+            userPrompt,
+            nodeId: projectTree.activeNodeId,
+          });
+      
+      const features = parseAiJson(generated.output);
+      if (!Array.isArray(features)) {
+        console.error('Features decomp did not return array:', features);
+        return;
+      }
+      
+      let createdCount = 0;
+      for (const feature of features) {
+        if (!feature.name || !feature.srsSegment) continue;
+        
+        const exists = projectTree.nodes.some(n => 
+          n.parentId === projectTree.activeNodeId && 
+          n.name.trim().toLowerCase() === feature.name.trim().toLowerCase()
+        );
+        if (exists) continue;
+        
+        const created = await createNodeApi({
+          parentId: projectTree.activeNodeId,
+          type: 'feature',
+          name: feature.name.trim(),
+          context: `Đặc tả bóc tách từ Screen: ${projectTree.activeNode.name}`,
+        });
+        
+        await createSkillRun({
+          nodeId: created.id,
+          skill: 'srs',
+          title: `SRS Phân rã: ${feature.name.trim()}`,
+          input: 'Được bóc tách tự động từ Screen SRS',
+          output: feature.srsSegment,
+          rawOutput: feature.srsSegment,
+          provider: generated.provider
+        });
+        createdCount++;
+      }
+      
+      await projectTree.refreshTree();
+      setToast(`Đã tự động tạo và bóc tách ${createdCount} Feature thành công!`);
+    } catch (e) {
+      console.error('Failed to decompose SRS:', e);
+      setToast(`Lỗi phân tách Feature: ${e.message}`);
+    }
+  }
+
+  async function handleGenAllTC() {
+    const childFeatures = projectTree.nodes.filter(n => n.parentId === projectTree.activeNodeId && n.type === 'feature');
+    if (!childFeatures.length) {
+      setToast('Không có Feature con nào dưới Screen này để sinh Test Case');
+      return;
+    }
+    
+    if (!window.confirm(`Sinh Test Case hàng loạt cho ${childFeatures.length} Feature con?`)) return;
+    
+    setBatchGenLoading(true);
+    setToast('Bắt đầu sinh Test Case hàng loạt...');
+    
+    let successCount = 0;
+    for (const feature of childFeatures) {
+      try {
+        const runs = await fetchSkillRuns(feature.id, 'srs');
+        const latestSrs = runs[0];
+        if (!latestSrs) {
+          console.warn(`Feature ${feature.name} không có SRS run, bỏ qua.`);
+          continue;
+        }
+        
+        const srsContent = latestSrs.output_json || latestSrs.rawOutput;
+        
+        const generated = demoMode
+          ? { output: DEMO_OUTPUTS.testcase, provider: 'demo' }
+          : await generateAiOutput({
+              skill: 'testcase',
+              systemPrompt: SKILLS.testcase.system,
+              userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { priority: 'High', types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
+              nodeId: feature.id,
+            });
+            
+        const parsed = parseAiJson(generated.output);
+        
+        if (Array.isArray(parsed.testCases)) {
+          await saveTestCasesApi(feature.id, parsed.testCases);
+        }
+        
+        await createSkillRun({
+          nodeId: feature.id,
+          skill: 'testcase',
+          title: `Batch Gen: ${feature.name}`,
+          input: srsContent,
+          output: parsed,
+          rawOutput: generated.output,
+          provider: generated.provider
+        });
+        successCount++;
+      } catch (e) {
+        console.error(`Lỗi sinh TC cho feature ${feature.name}:`, e);
+      }
+    }
+    
+    setBatchGenLoading(false);
+    setToast(`Đã sinh Test Case thành công cho ${successCount}/${childFeatures.length} Feature!`);
   }
 
   async function handleImageUpload(event) {
@@ -674,9 +800,16 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               <h1>{projectTree.activeNode ? projectTree.activePath.map(n => n.name).join(' / ') : 'Chưa chọn node'}</h1>
               <p>{projectTree.activeNode?.context || 'Chọn hoặc tạo project/module/screen/feature để output có đúng ngữ cảnh.'}</p>
             </div>
-            <button className="btn-primary" onClick={generate} disabled={loading}>
-              {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {projectTree.activeNode?.type === 'screen' && (
+                <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
+                  {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
+                </button>
+              )}
+              <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
+                {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
+              </button>
+            </div>
           </div>
 
           <section className="panel">
