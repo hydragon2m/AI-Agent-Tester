@@ -1,14 +1,15 @@
 import { ProviderPills } from '../providers/ProviderPills';
+import hydraLogo from '../../hydra-logo.png';
 
 export function AppHeader({ demoMode, setDemoMode, providerStatus, onOpenSettings }) {
   return (
     <header className="header">
       <div className="header-inner">
         <div className="logo">
-          <div className="logo-icon">✓</div>
+          <img src={hydraLogo} alt="Hydra Logo" className="logo-img" style={{ height: '36px', width: 'auto', display: 'block' }} />
           <div className="logo-text">
-            <span className="logo-title">AI QA Assistant</span>
-            <span className="logo-sub">React Web Migration</span>
+            <span className="logo-title" style={{ fontSize: '1.2rem', letterSpacing: '0.05em' }}>HYDRA QA</span>
+            <span className="logo-sub">AI QA Assistant</span>
           </div>
         </div>
         <div className="header-actions">
