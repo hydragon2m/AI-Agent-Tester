@@ -132,7 +132,16 @@ function App() {
     }
     const latest = skillHistory.runs[0] || null;
     setActiveHistoryId(latest?.id || null);
-    workspace.setSkillInput(latest?.input || '');
+    
+    let defaultInput = latest?.input || '';
+    if (workspace.activeSkill === 'testcase' && !defaultInput) {
+      const srsText = workspace.outputs.srs;
+      if (srsText) {
+        defaultInput = typeof srsText === 'string' ? srsText : (srsText.content || '');
+      }
+    }
+    workspace.setSkillInput(defaultInput);
+
     if (workspace.activeSkill !== 'testcase') {
       if (latest) workspace.setSkillOutput(latest.output, latest.rawOutput, workspace.activeSkill);
       else workspace.clearSkillOutput(workspace.activeSkill);
@@ -383,6 +392,42 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     workspace.setSkillInput(String(srsText), 'testcase');
     workspace.setActiveSkill('testcase');
     setToast('Đã chuyển SRS sang Test Cases — bấm Generate để sinh test case');
+  }
+
+  async function handleClarificationSubmit(answers) {
+    if (workspace.activeSkill !== 'srs') return;
+    
+    const answerMarkdown = "\n\n### CÂU TRẢ LỜI LÀM RÕ:\n" + 
+      Object.entries(answers)
+        .map(([qLabel, qAnswer]) => `- **${qLabel}**: ${qAnswer}`)
+        .join('\n');
+        
+    const nextRequirement = workspace.input.trim() + answerMarkdown;
+    workspace.setSkillInput(nextRequirement);
+    
+    setTimeout(async () => {
+      dismissReview();
+      setLoading(true);
+      try {
+        const generated = demoMode
+          ? { output: DEMO_OUTPUTS.srs, provider: 'demo' }
+          : await generateAiOutput({
+              skill: 'srs',
+              systemPrompt: skill.system,
+              userPrompt: skill.buildPrompt(nextRequirement, buildContext(projectTree.activePath), { ...workspace.options, hasImage: false }),
+              nodeId: projectTree.activeNodeId,
+            });
+
+        const parsed = stripCodeFence(generated.output);
+        workspace.setSkillOutput(parsed, generated.output);
+        await saveSkillRun(nextRequirement, parsed, generated.output, generated.provider);
+        setToast(`Đã cập nhật SRS bằng ${generated.provider}`);
+      } catch (e) {
+        setToast(`Lỗi: ${e.message}`);
+      } finally {
+        setLoading(false);
+      }
+    }, 50);
   }
 
   async function handleImageUpload(event) {
@@ -734,6 +779,8 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               onKeepAllReview={keepAllOriginals}
               onApplyReview={applyReviewSelections}
               onDismissReview={dismissReview}
+              onSubmitClarifications={handleClarificationSubmit}
+              loading={loading}
             />
           </section>
         </section>
