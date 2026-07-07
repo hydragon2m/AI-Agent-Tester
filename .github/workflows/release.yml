@@ -17,13 +17,20 @@ jobs:
       matrix:
         include:
           - platform: 'windows-latest'
-            args: ''
+            pkg_target: 'node20-win-x64'
+            bin_name: 'hydra-server.exe'
+            tauri_args: ''
           - platform: 'ubuntu-22.04'
-            args: ''
+            pkg_target: 'node20-linux-x64'
+            bin_name: 'hydra-server'
+            tauri_args: ''
           - platform: 'macos-latest'
-            args: ''
+            pkg_target: 'node20-macos-arm64'
+            bin_name: 'hydra-server'
+            tauri_args: ''
 
     runs-on: ${{ matrix.platform }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,7 +38,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -43,25 +51,62 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Install dependencies (Ubuntu only)
+      - name: Install system dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
 
-      - name: Install frontend dependencies
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Create binaries directory
+        run: mkdir -p src-tauri/binaries
+
+      # Dùng @yao-pkg/pkg để compile Node.js server thành file binary độc lập.
+      # Người dùng cuối KHÔNG cần cài Node.js.
+      - name: Bundle server into standalone binary
         run: |
-          npm ci
+          npx pkg src/server/app.js \
+            --target ${{ matrix.pkg_target }} \
+            --output src-tauri/binaries/${{ matrix.bin_name }} \
+            --no-bytecode \
+            --public \
+            --public-packages "*"
+
+      - name: Verify server binary exists
+        run: |
+          ls -lh src-tauri/binaries/
+
+      - name: Build frontend (Vite)
+        run: npm run build
 
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__ # tauri-action will replace with package.json version
-          releaseName: 'AI QA Assistant v__VERSION__'
-          releaseBody: 'Tự động đóng gói ứng dụng từ GitHub Actions.'
+          tagName: v__VERSION__
+          releaseName: 'HYDRA QA v__VERSION__'
+          releaseBody: |
+            ## HYDRA QA Desktop App 🚀
+
+            Ứng dụng AI tự động tạo Test Case — không cần cài đặt gì thêm!
+
+            ### Tải xuống
+            - **Windows**: tải file `.msi` hoặc setup `.exe`
+            - **macOS**: tải file `.dmg`
+            - **Linux**: tải file `.AppImage` hoặc `.deb`
+
+            ### Ghi chú
+            - Server backend đã được đóng gói sẵn trong ứng dụng
+            - Dữ liệu lưu tại `~/.hydra-qa/database.sqlite`
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.tauri_args }}
           projectPath: '.'

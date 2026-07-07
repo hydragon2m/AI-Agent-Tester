@@ -505,55 +505,82 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
       return;
     }
     
-    if (!window.confirm(`Sinh Test Case hàng loạt cho ${childFeatures.length} Feature con?`)) return;
+    if (!window.confirm(`Sinh Test Case song song cho ${childFeatures.length} Feature con?`)) return;
     
     setBatchGenLoading(true);
-    setToast('Bắt đầu sinh Test Case hàng loạt...');
-    
+
+    // Batched parallel execution – process BATCH_SIZE features at a time
+    // to avoid hitting API rate limits while still being much faster than sequential
+    const BATCH_SIZE = 3;
     let successCount = 0;
-    for (const feature of childFeatures) {
-      try {
-        const runs = await fetchSkillRuns(feature.id, 'srs');
-        const latestSrs = runs[0];
-        if (!latestSrs) {
-          console.warn(`Feature ${feature.name} không có SRS run, bỏ qua.`);
-          continue;
+    let failCount = 0;
+
+    async function genForFeature(feature) {
+      const runs = await fetchSkillRuns(feature.id, 'srs');
+      const latestSrs = runs[0];
+      if (!latestSrs) {
+        console.warn(`Feature ${feature.name} không có SRS run, bỏ qua.`);
+        return false;
+      }
+
+      const srsContent = latestSrs.output_json || latestSrs.rawOutput;
+
+      const generated = demoMode
+        ? { output: DEMO_OUTPUTS.testcase, provider: 'demo' }
+        : await generateAiOutput({
+            skill: 'testcase',
+            systemPrompt: SKILLS.testcase.system,
+            userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { priority: 'High', types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
+            nodeId: feature.id,
+          });
+
+      const parsed = parseAiJson(generated.output);
+
+      if (Array.isArray(parsed.testCases)) {
+        await saveTestCasesApi(feature.id, parsed.testCases);
+      }
+
+      await createSkillRun({
+        nodeId: feature.id,
+        skill: 'testcase',
+        title: `Batch Gen: ${feature.name}`,
+        input: srsContent,
+        output: parsed,
+        rawOutput: generated.output,
+        provider: generated.provider
+      });
+
+      return true;
+    }
+
+    for (let i = 0; i < childFeatures.length; i += BATCH_SIZE) {
+      const batch = childFeatures.slice(i, i + BATCH_SIZE);
+      const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(childFeatures.length / BATCH_SIZE);
+
+      setToast(`Đang xử lý batch ${batchIndex}/${totalBatches} (${batch.map(f => f.name).join(', ')})...`);
+
+      const results = await Promise.allSettled(batch.map(feature => genForFeature(feature)));
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value === true) {
+          successCount++;
+        } else {
+          failCount++;
+          if (result.status === 'rejected') {
+            console.error('Batch gen error:', result.reason);
+          }
         }
-        
-        const srsContent = latestSrs.output_json || latestSrs.rawOutput;
-        
-        const generated = demoMode
-          ? { output: DEMO_OUTPUTS.testcase, provider: 'demo' }
-          : await generateAiOutput({
-              skill: 'testcase',
-              systemPrompt: SKILLS.testcase.system,
-              userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { priority: 'High', types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
-              nodeId: feature.id,
-            });
-            
-        const parsed = parseAiJson(generated.output);
-        
-        if (Array.isArray(parsed.testCases)) {
-          await saveTestCasesApi(feature.id, parsed.testCases);
-        }
-        
-        await createSkillRun({
-          nodeId: feature.id,
-          skill: 'testcase',
-          title: `Batch Gen: ${feature.name}`,
-          input: srsContent,
-          output: parsed,
-          rawOutput: generated.output,
-          provider: generated.provider
-        });
-        successCount++;
-      } catch (e) {
-        console.error(`Lỗi sinh TC cho feature ${feature.name}:`, e);
       }
     }
-    
+
     setBatchGenLoading(false);
-    setToast(`Đã sinh Test Case thành công cho ${successCount}/${childFeatures.length} Feature!`);
+
+    if (failCount === 0) {
+      setToast(`✅ Đã sinh Test Case thành công cho tất cả ${successCount}/${childFeatures.length} Feature!`);
+    } else {
+      setToast(`⚠ Hoàn tất: ${successCount} thành công, ${failCount} thất bại trong tổng số ${childFeatures.length} Feature.`);
+    }
   }
 
   function handleUpdateTestCases(updatedCases) {
