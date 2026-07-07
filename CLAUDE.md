@@ -29,6 +29,7 @@ src/web/             # React frontend
 - Không thay đổi response JSON format — frontend parse theo format cũ
 - Không xóa import đang dùng — check references trước
 - Sau khi sửa xong: cập nhật CODEBASE-STATE.md
+- ĐẦU session: đọc `HANDOFF.md` (trạng thái phiên trước + điều cấm). CUỐI session: cập nhật lại `HANDOFF.md`
 
 ## Flow nghiệp vụ chính
 Đọc `CODEBASE-STATE.md` trước khi sửa code — file đó chứa 6 flow chi tiết:

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { fetchProviderSettingsApi, fetchProviderStatusApi, saveProviderSettingApi } from '../backend-api/providers.api';
 
+// Chỉ dùng Gemini — không hiển thị Claude/OpenAI trên UI Settings
 const DEFAULT_PROVIDER_FORM = {
   gemini: { key: '', enabled: true, priority: 1, hasKey: false },
-  claude: { key: '', enabled: false, priority: 2, hasKey: false },
-  openai: { key: '', enabled: false, priority: 3, hasKey: false },
 };
 
 export function useProviderSettings(onToast) {

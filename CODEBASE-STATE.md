@@ -139,6 +139,81 @@ Response → [OutputPanel.jsx] render markdown SRS
 
 ---
 
+### FLOW 2b — Câu hỏi làm rõ (clarification) + Phân rã thành Feature (nối tiếp Flow 2)
+
+```
+Nếu input quá mơ hồ, SKILLS.srs (skill-registry.js) yêu cầu AI CHỈ trả về 1 hộp
+"[CÂU HỎI LÀM RÕ]" liệt kê TẤT CẢ câu hỏi cần thiết trong 1 lần (không hỏi nhỏ giọt
+nhiều vòng) — không viết SRS.
+    ↓
+[OutputPanel.jsx] parse hộp này bằng parseClarificationQuestions()
+(features/skills/srs-clarification.js — dùng CHUNG giữa OutputPanel và main.jsx,
+không tách 2 bản khác nhau) → hiện <ClarificationForm> cho user trả lời từng câu.
+    ↓
+User trả lời → [main.jsx] handleClarificationSubmit():
+    - Gọi SKILLS.srs.buildFinalizePrompt(previousSrs, answersMarkdown, context)
+      — gửi SRS/câu hỏi trước đó + câu trả lời mới, KHÔNG gửi lại toàn bộ input
+      gốc để phân tích lại từ đầu (nhanh hơn vòng gen đầu).
+    - System prompt: khi input có heading "### CÂU TRẢ LỜI LÀM RÕ" → BẮT BUỘC
+      viết SRS đầy đủ, KHÔNG hỏi lại câu đã trả lời, chi tiết nhỏ còn thiếu thì
+      tự gắn "[GIẢ ĐỊNH]" thay vì hỏi tiếp — tránh vòng lặp hỏi vô hạn.
+    ↓
+SRS hoàn chỉnh (không còn hộp câu hỏi) → [OutputPanel.jsx] hiện banner xanh
+"✅ SRS đã hoàn chỉnh" (không tự ẩn như toast).
+    ↓
+★ THỦ CÔNG, KHÔNG TỰ ĐỘNG ★ — nếu node đang chọn có type = "module" HOẶC "screen"
+(FEATURE_PARENT_TYPES trong main.jsx) VÀ parseClarificationQuestions(SRS) rỗng
+(SRS thực sự hoàn chỉnh) → hiện nút "Phân rã thành Feature" ở khu Output (cùng
+hàng với "Viết Test Case →"). User bấm nút này (KHÔNG tự chạy ngay sau khi Gen
+SRS xong — user tự quyết định lúc nào bóc tách) → [main.jsx] handleDecomposeFeatures()
+→ decomposeSrs():
+    - Dùng SKILLS.srsdecomposer (skill-registry.js) để tách SRS thành mảng
+      [{ name, srsSegment }] (JSON) qua POST /api/ai/generate với expectJson: true.
+    - Với mỗi feature mới (chưa tồn tại node con cùng tên): tạo node type="feature"
+      qua createNodeApi() — parent có thể là "module" (feature là con trực tiếp,
+      bỏ qua cấp "screen" trung gian) hoặc "screen" (đúng hierarchy chuẩn) — cả 2
+      đều hợp lệ, backend (node.service.js) không ràng buộc type cha/con, chỉ
+      validate `type` nằm trong ['project','module','screen','feature'].
+    - Tạo 1 skill_run skill="srs" cho node feature mới với output = srsSegment
+      (để feature con đã có sẵn SRS riêng, gen TC luôn được).
+    - Hiện banner kết quả (số feature tạo được + tên) — không tự ẩn.
+    - projectTree.refreshTree() để sidebar hiện ngay các feature con mới.
+    ↓
+Từ Module/Screen: nút "Gen All TC" (handleGenAllTC) sinh Test Case song song
+(BATCH_SIZE=3) cho TẤT CẢ feature con đã có SRS. Muốn gen thủ công từng feature
+→ chọn feature đó trên sidebar, dùng skill Test Case như bình thường (Flow 3).
+```
+
+**Skill `srsdecomposer` là NỘI BỘ — không hiện trong sidebar chọn skill:**
+`SkillSidebar.jsx` lọc bỏ key `srsdecomposer` khỏi danh sách nút chọn skill
+(`Object.entries(SKILLS).filter(([key]) => key !== 'srsdecomposer')`) vì skill
+này chỉ có ý nghĩa khi được gọi từ `decomposeSrs()` — nếu user tự chọn skill
+này và bấm Generate qua đường chung, AI trả về 1 mảng JSON `[{name, srsSegment}]`
+nhưng `OutputPanel.jsx` không biết render dạng này (không phải markdown, không
+phải `{testCases:[...]}`) → hiện ra `"[object Object],..."`, đồng thời KHÔNG hề
+tạo Feature nào (logic tạo node chỉ nằm trong `decomposeSrs()`). Đã từng là bug
+thật (xem Lịch sử thay đổi) — **không được bỏ dòng filter này**.
+
+**Về provider JSON (testcase, tcquality, srsdecomposer):** khi gọi AI cho các
+skill này, luôn truyền `expectJson: true` trong body `/api/ai/generate` →
+`ai-router.service.js` → Gemini bật `responseMimeType: 'application/json'` +
+nâng `maxOutputTokens` lên 32768 (mặc định skill markdown vẫn 8192) — output
+JSON dài (nhiều feature/nhiều TC) từng bị cắt cụt giữa chừng ở 8192 token gây
+`JSON.parse` lỗi "Unterminated string", đã xác nhận qua test thực tế là tăng
+token giải quyết được.
+
+**⛔ KHÔNG ĐƯỢC:**
+- Gọi `decomposeSrs()` khi `parseClarificationQuestions()` trên output còn > 0
+  câu hỏi — nghĩa là SRS chưa hoàn chỉnh, chưa có gì để bóc tách.
+- Tự động gọi lại `decomposeSrs()` ngay sau khi Gen SRS xong — đây là hành động
+  THỦ CÔNG theo yêu cầu, user phải chủ động bấm nút "Phân rã thành Feature".
+- Sửa `parseClarificationQuestions()` ở 1 chỗ mà quên chỗ kia — luôn import từ
+  `features/skills/srs-clarification.js`, không copy lại logic.
+- Bỏ dòng `.filter(([key]) => key !== 'srsdecomposer')` trong `SkillSidebar.jsx`
+  — sẽ tái phát bug "[object Object]" khi user tự chọn skill này.
+
+---
+
 ### FLOW 3 — Gen TC từ SRS (nối tiếp Flow 2)
 
 ```
@@ -375,14 +450,8 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 
 ## Quy tắc code BẮT BUỘC
 
-1. **LUÔN `view` file trước khi sửa** — đọc code hiện tại, không viết từ trí nhớ
-2. **Dùng `str_replace` sửa đúng chỗ** — KHÔNG rewrite toàn bộ file
-3. **Không xóa import** đang dùng — check references trước
-4. **Không đổi tên route/endpoint** — frontend gọi đúng path
-5. **Không thay đổi response JSON format** — frontend parse theo format cũ
-6. **Khi thêm feature mới:** tạo file/function mới, KHÔNG refactor code cũ
-7. **Khi sửa bug:** sửa đúng chỗ bug, không "tiện thể refactor"
-8. **Sau khi xong:** cập nhật file CODEBASE-STATE.md này
+> Xem `CLAUDE.md` (mục "Quy tắc code BẮT BUỘC") — đó là nguồn chính, được nạp tự động mỗi session. Không lặp lại ở đây để tránh 2 bản lệch nhau.
+> Bổ sung riêng cho file này: **Khi sửa bug** chỉ sửa đúng chỗ bug, không "tiện thể refactor".
 
 ---
 
@@ -397,6 +466,7 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 | create-api-testcase | create-api-testcase.md | "tạo TC API từ CURL" | CSV + Postman JSON |
 | ui-testing | ui-testing.md | "/run TC-PM-011" | report + screenshot |
 | api-testing | api-testing.md | "/run-api TC-PM-028" | report + JSON evidence |
+| srsdecomposer | skill-registry.js (`SKILLS.srsdecomposer`) | (internal, tự động — xem FLOW 2b) sau khi Gen SRS xong trên node type="screen" | JSON `[{ name, srsSegment }]` |
 
 ---
 
@@ -419,6 +489,9 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 | 2 | Lark field mapping vỡ khi đổi tên cột | useLarkMapping.js | Error message chưa rõ |
 | 3 | SQLite không scale >5 user | schema.sql | Migrate PostgreSQL sau |
 | 4 | Auto-fill SRS→TC chưa handle case nhiều SRS run | useSkillWorkspace.js | Lấy run mới nhất |
+| 5 | AI SRS thỉnh thoảng vẫn hỏi thêm 1 câu ở vòng chốt nếu câu trả lời user hé lộ mâu thuẫn thật sự mới | skill-registry.js (system prompt) | Chấp nhận được — chỉ xảy ra khi có mâu thuẫn nghiệp vụ thật, không phải hỏi vụn vặt như trước |
+| 6 | `parseClarificationQuestions` vẫn có thể miss nếu AI dùng định dạng hộp câu hỏi khác hẳn 3 dạng đã test (`> **[...]**`, `**[...]**`, `# [...]`) | srs-clarification.js | Regex đã lenient nhưng không bao quát 100% — nếu gặp case mới cần bổ sung thêm biến thể vào regex |
+| 7 | Nút "+ Thêm feature" thủ công trên TreeNode (sidebar) vẫn gợi ý next-type theo hierarchy cứng module→screen→feature (`NEXT_TYPE` trong TreeNode.jsx) — không tự nhận biết trường hợp user tạo feature trực tiếp dưới module (bỏ qua screen) như nút "Phân rã thành Feature" hỗ trợ | TreeNode.jsx | Không ảnh hưởng — user vẫn tạo thủ công bình thường, chỉ là gợi ý mặc định chưa khớp 100% mọi cách tổ chức cây |
 
 ---
 
@@ -431,3 +504,6 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 | ___ | Thêm SRS generator skill | skill-registry.js | ✅ |
 | ___ | Thêm audit-structured skill | skill-registry.js | ✅ |
 | ___ | Build ui-testing + api-testing skills | .md files | ✅ |
+| 2026-07-07 | Fix vòng lặp hỏi vô hạn SRS (system prompt: hỏi hết 1 lượt, không hỏi lại sau vòng chốt); thêm buildFinalizePrompt (vòng chốt nhanh hơn); fix parseClarificationQuestions bỏ lỡ câu hỏi khi AI đổi format hộp câu hỏi (nguyên nhân chính khiến cả form hỏi lẫn auto-decompose "không hoạt động"); chặn auto-decompose khi SRS chưa hoàn chỉnh; fix output_json→output field sai ở handleGenAllTC; thêm expectJson ép JSON + nâng maxOutputTokens 8192→32768 cho skill JSON (fix JSON bị cắt cụt) | skill-registry.js, srs-clarification.js (mới), OutputPanel.jsx, main.jsx, ai.routes.js, ai-router.service.js, gemini.provider.js, openai.provider.js | ✅ Đã test thật với Gemini (round hỏi → round chốt → decompose ra 7 feature hợp lệ) |
+| 2026-07-07 | Fix bug "[object Object]" khi user tự chọn skill nội bộ `srsdecomposer` từ sidebar (skill này giờ bị ẩn khỏi danh sách chọn); đổi "Auto Decompose" từ TỰ ĐỘNG sang THỦ CÔNG — thêm nút "Phân rã thành Feature" ở Output, user tự bấm sau khi xem SRS xong; mở rộng hỗ trợ node type "module" (không chỉ "screen") cho cả nút này lẫn "Gen All TC", vì user tổ chức cây Project→Module→Feature trực tiếp (bỏ qua Screen) — đã verify backend không ràng buộc type cha/con nên an toàn | SkillSidebar.jsx, main.jsx | ✅ Build pass; verify độc lập qua workflow (sidebar filter đúng, decomposeSrs không phụ thuộc sidebar, không còn path nào khác lộ srsdecomposer); test thật tạo node feature dưới module qua node.service.js |
+| 2026-07-07 | Fix `projectTree.refreshTree is not a function` — hook `useProjectTree()` định nghĩa `refreshTree()` và dùng nội bộ (createNode/renameNode/deleteNode/importNodes) nhưng quên liệt kê trong object trả về, nên bên ngoài hook (ví dụ `main.jsx#decomposeSrs()`) gọi `projectTree.refreshTree()` luôn bị `undefined`. Bug có sẵn từ trước, chỉ lộ ra hôm nay khi user lần đầu bấm trót lọt tới bước cuối của "Phân rã thành Feature" trên UI thật | useProjectTree.js | ✅ Build pass; đối chiếu đủ 10 usage `projectTree.*` trong main.jsx với object trả về của hook, không còn field nào khác bị thiếu tương tự — CHƯA re-verify qua UI thật sau fix |

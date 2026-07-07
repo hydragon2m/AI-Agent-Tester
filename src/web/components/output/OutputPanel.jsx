@@ -1,27 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SKILLS } from '../../features/skills/skill-registry';
+import { parseClarificationQuestions } from '../../features/skills/srs-clarification';
 import { CodeOutput } from './CodeOutput';
 import { MarkdownOutput } from './MarkdownOutput';
 import { TestCaseReviewPanel } from './TestCaseReviewPanel';
 import { TestCaseTable } from './TestCaseTable';
-
-function parseClarificationQuestions(markdownText) {
-  if (typeof markdownText !== 'string') return [];
-  const blockRegex = /(?:>|\s)*\*\*\[CÂU HỎI LÀM RÕ[^\]]+\]\*\*(?:\s*\n)([\s\S]*?)(?=\n\n|\n##|\n#|$)/i;
-  const match = markdownText.match(blockRegex);
-  if (!match) return [];
-  
-  const linesBlock = match[1];
-  const questionRegex = /(?:>|\s)*-\s*(?:\*([^*]+)\*|([^*:\n]+))\s*:\s*([^\n]+)/g;
-  const questions = [];
-  let m;
-  while ((m = questionRegex.exec(linesBlock)) !== null) {
-    const label = m[1] || m[2] || 'Câu hỏi';
-    const text = m[3];
-    questions.push({ label: label.trim(), text: text.trim() });
-  }
-  return questions;
-}
 
 function ClarificationForm({ questions, onSubmit, loading }) {
   const [answers, setAnswers] = useState({});
@@ -62,6 +45,21 @@ function ClarificationForm({ questions, onSubmit, loading }) {
   );
 }
 
+// Nổi bật hơn toast (không tự ẩn sau vài giây) — báo SRS đã hoàn chỉnh, không còn
+// điểm cần làm rõ. `signature` đổi (nội dung SRS mới) sẽ tự hiện lại dù trước đó
+// user đã dismiss.
+function SrsCompleteBanner({ signature }) {
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => setDismissed(false), [signature]);
+  if (dismissed) return null;
+  return (
+    <div className="srs-complete-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, border: '1px solid #2ecc71', background: 'rgba(46, 204, 113, 0.08)', padding: '10px 16px', borderRadius: 8, marginBottom: 16 }}>
+      <span style={{ color: '#2ecc71', fontWeight: 600, fontSize: 13 }}>✅ SRS đã hoàn chỉnh — không còn điểm cần làm rõ.</span>
+      <button type="button" className="btn-secondary" onClick={() => setDismissed(true)}>Ẩn</button>
+    </div>
+  );
+}
+
 export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading, onUpdateTestCases }) {
   if (!output && !rawOutput) return <div className="empty-state table-empty">Chưa có output.</div>;
   if (activeSkill === 'testcase') {
@@ -90,12 +88,15 @@ export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDeci
   return (
     <div className="output-sections">
       {questions.length > 0 && onSubmitClarifications && (
-        <ClarificationForm 
-          key={questions.map(q => q.label).join('_')} 
-          questions={questions} 
-          onSubmit={onSubmitClarifications} 
+        <ClarificationForm
+          key={questions.map(q => q.label).join('_')}
+          questions={questions}
+          onSubmit={onSubmitClarifications}
           loading={loading}
         />
+      )}
+      {activeSkill === 'srs' && questions.length === 0 && srsMarkdown.trim() && (
+        <SrsCompleteBanner signature={srsMarkdown} />
       )}
       <MarkdownOutput value={srsMarkdown} />
     </div>

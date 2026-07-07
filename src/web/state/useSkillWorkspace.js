@@ -7,7 +7,6 @@ export function useSkillWorkspace() {
   const [rawOutputs, setRawOutputs] = useState({});
   const [images, setImages] = useState({});
   const [options, setOptions] = useState({
-    priority: 'High',
     types: ['Positive', 'Negative', 'Boundary', 'Edge Case'],
     apiFormat: 'postman',
     browser: 'chromium',

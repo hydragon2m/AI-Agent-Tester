@@ -17,6 +17,8 @@ QUY TẮC BẮT BUỘC:
    > - *Câu hỏi 1*: [Mô tả chi tiết câu hỏi, ví dụ: Bạn muốn có những Trạng thái sản phẩm cụ thể nào? Gợi ý: Hoạt động, Ngừng hoạt động, Bản nháp...]
    > - *Câu hỏi 2*: [Ví dụ: Thao tác hàng loạt gồm những hành động gì? Gợi ý: Xóa hàng loạt, Cập nhật trạng thái hàng loạt...]
    KHÔNG được tự ý suy đoán các giá trị cụ thể này nếu đề bài không cho. Đồng thời, vẫn ghi nhận các dòng tương ứng vào bảng ở phần "8. Điểm chưa rõ — Cần xác nhận" ở cuối tài liệu.
+   QUAN TRỌNG — hỏi hết 1 lượt, không hỏi nhỏ giọt: mỗi khi chèn hộp này, PHẢI rà soát và liệt kê NGAY MỘT LẦN toàn bộ câu hỏi cần thiết để hoàn thiện SRS (actor/role, hành động chính, trạng thái/state, validation, ràng buộc nghiệp vụ, phân quyền, số liệu cụ thể...) — không được chỉ hỏi 1-2 câu rồi để dành câu khác hỏi ở lượt sau.
+   VÒNG CHỐT SAU KHI USER ĐÃ TRẢ LỜI: nếu input được cung cấp có chứa heading "### CÂU TRẢ LỜI LÀM RÕ" (nghĩa là đây là vòng chốt, user đã trả lời các câu hỏi làm rõ trước đó), bạn TUYỆT ĐỐI KHÔNG được hỏi lại các câu đã có câu trả lời ở đó, và KHÔNG được chèn hộp "[CÂU HỎI LÀM RÕ]" nữa — trừ khi chính câu trả lời mới gây ra 1 mâu thuẫn nghiêm trọng (business-critical) chưa từng được hỏi trước đó. Với những chi tiết rất nhỏ vẫn còn thiếu sau khi đã có câu trả lời, tự đưa ra giả định hợp lý, gắn tag "[GIẢ ĐỊNH]" ngay tại chỗ dùng, và liệt kê ở mục "8. Điểm chưa rõ" — luôn phải hoàn thành và trả về đầy đủ tài liệu SRS ở vòng này, không được để trống.
 3. KHÔNG dùng ngôn ngữ mơ hồ như "hệ thống sẽ xử lý phù hợp", "thực hiện đúng cách" — phải có con số, trạng thái, điều kiện cụ thể.
 4. Nếu input là ảnh wireframe/mockup: mô tả CHI TIẾT từng element nhìn thấy — không bỏ sót field, nút, label, badge, icon, tooltip nào. Nếu input CHỈ có ảnh (không có text), phải đọc kỹ ảnh để tự suy luận toàn bộ luồng và yêu cầu.
 5. Mọi Acceptance Criteria viết theo format: "GIVEN <điều kiện ban đầu> WHEN <hành động> THEN <kết quả mong đợi>".
@@ -30,7 +32,8 @@ QUY TẮC BẮT BUỘC:
 BƯỚC 0 — KIỂM TRA INPUT ĐỦ HAY QUÁ MƠ HỒ (làm trước khi viết SRS):
 Input ĐỦ để viết SRS khi thỏa ít nhất 1 trong 3 điều kiện: có ≥3 câu mô tả nghiệp vụ cụ thể (field/action/trạng thái rõ ràng), HOẶC có ảnh wireframe/mockup/screenshot cho thấy UI elements rõ ràng, HOẶC có ảnh + text bổ sung cho nhau.
 Input QUÁ MƠ HỒ khi: chỉ có 1-2 câu chung chung không đề cập field/action cụ thể nào (ví dụ "Tính năng quản lý sản phẩm"), hoặc chỉ có tên tính năng mà không mô tả gì thêm.
-Nếu input quá mơ hồ → KHÔNG viết SRS ngay. Thay vào đó, chỉ trả về danh sách ít nhất 3 câu hỏi cụ thể cần hỏi lại user trước khi viết được SRS, ví dụ: (1) Actor chính là ai? (2) Các thao tác chính là gì? (3) Có ràng buộc nghiệp vụ đặc biệt nào không (phân quyền, trạng thái, validation)? — Không viết bất kỳ section nào của SRS trong trường hợp này.
+Nếu input quá mơ hồ → KHÔNG viết SRS ngay. Thay vào đó, chỉ trả về danh sách TẤT CẢ câu hỏi cụ thể cần hỏi lại user trong 1 LẦN DUY NHẤT (tối thiểu 3 câu, nhưng phải bao quát hết các khía cạnh còn thiếu: actor, hành động chính, trạng thái, ràng buộc nghiệp vụ, phân quyền, validation...) trước khi viết được SRS, ví dụ: (1) Actor chính là ai? (2) Các thao tác chính là gì? (3) Có ràng buộc nghiệp vụ đặc biệt nào không (phân quyền, trạng thái, validation)? — Không viết bất kỳ section nào của SRS trong trường hợp này, và không hỏi thêm câu mới ở lượt sau nếu câu đó lẽ ra đã có thể hỏi ngay từ lượt này.
+Ngoại lệ: nếu input có chứa heading "### CÂU TRẢ LỜI LÀM RÕ" (vòng chốt sau khi user đã trả lời) → BỎ QUA Bước 0, luôn viết SRS đầy đủ dựa trên câu trả lời đã có (xem quy tắc "VÒNG CHỐT" ở mục Quy tắc bắt buộc #2), dù input gốc có thể vẫn ngắn.
 
 INPUT TYPE — cách xử lý:
 - text: bóc tách yêu cầu hiển (nêu rõ) và ẩn (ngầm hiểu, gắn "[SUY LUẬN]").
@@ -118,6 +121,21 @@ Yêu cầu output:
 - Mức độ chi tiết do user chọn: ${detailLevel === 'concise' ? 'concise (ngắn gọn — chỉ section 1, 3, 5 nếu có ảnh, 8, 9).' : 'full (đầy đủ 9 section), nhưng tự chuyển sang concise nếu input chỉ mô tả 1 form đơn giản (nêu rõ lý do nếu tự chuyển).'}
 - Ngôn ngữ: Tiếng Việt (thuật ngữ kỹ thuật giữ nguyên tiếng Anh).`;
     },
+    // Vòng chốt sau khi user trả lời câu hỏi làm rõ: gửi kèm SRS đã sinh trước đó +
+    // câu trả lời mới, để AI CẬP NHẬT thay vì phân tích lại toàn bộ input gốc từ đầu.
+    buildFinalizePrompt(previousSrs, answersMarkdown, context) {
+      return `${context}
+
+BẢN SRS ĐÃ SINH TRƯỚC ĐÓ (dựa trên input ban đầu, còn thiếu vài điểm cần làm rõ):
+---
+${previousSrs}
+---
+
+${answersMarkdown}
+
+NHIỆM VỤ:
+Đây là vòng chốt sau khi người dùng đã trả lời các câu hỏi làm rõ ở trên. Dựa trên bản SRS trước đó, viết lại HOÀN CHỈNH tài liệu SRS theo đúng cấu trúc 9 section đã quy định trong system prompt — chỉ cập nhật/bổ sung các phần liên quan trực tiếp tới câu trả lời, giữ nguyên nội dung các phần không liên quan. KHÔNG hỏi lại các câu đã được trả lời, KHÔNG chèn hộp "[CÂU HỎI LÀM RÕ]" nữa trừ khi câu trả lời gây ra mâu thuẫn nghiêm trọng chưa từng được hỏi. Nếu vẫn còn chi tiết rất nhỏ chưa rõ, tự đưa ra giả định hợp lý gắn "[GIẢ ĐỊNH]" và liệt kê ở mục 8. Ngôn ngữ: Tiếng Việt (thuật ngữ kỹ thuật giữ nguyên tiếng Anh).`;
+    },
   },
   testcase: {
     label: 'Test Cases',
@@ -160,7 +178,6 @@ ${input}
 Yêu cầu:
 - Ngôn ngữ output: Tiếng Việt.
 - Tối đa 20 test cases.
-- Priority focus: ${options.priority}.
 - Test types mong muốn: ${options.types.join(', ') || 'Functional, Negative, Edge Case'}.
 - type chỉ dùng: Positive | Negative | Boundary | Edge Case | Security | UI/UX.
 - priority chỉ dùng: High | Medium | Low.

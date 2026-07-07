@@ -6,14 +6,6 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
   if (activeSkill === 'testcase') {
     return (
       <div className="skill-options-row">
-        <label>
-          Priority
-          <select value={options.priority} onChange={e => patch({ priority: e.target.value })}>
-            <option>High</option>
-            <option>Medium</option>
-            <option>Low</option>
-          </select>
-        </label>
         <div className="toggle-group">
           {['Positive', 'Negative', 'Boundary', 'Edge Case', 'Security', 'UI/UX'].map(type => (
             <button

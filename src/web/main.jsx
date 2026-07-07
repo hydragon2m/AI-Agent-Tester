@@ -14,6 +14,7 @@ import { ManualPromptModal } from './components/output/ManualPromptModal';
 import { OutputPanel } from './components/output/OutputPanel';
 import { ProviderSettingsModal } from './components/providers/ProviderSettingsModal';
 import { DEMO_OUTPUTS, EXAMPLES, SKILLS } from './features/skills/skill-registry';
+import { parseClarificationQuestions } from './features/skills/srs-clarification';
 import { toCsv, toLarkClipboardPayload, toMarkdown } from './features/testcase/testcase-export';
 import { parseAiJson, stripCodeFence } from './features/testcase/testcase-parser';
 import { QUALITY_SYSTEM_PROMPT, buildQualityPrompt, buildFinalTestCases } from './features/testcase/testcase-quality';
@@ -24,6 +25,11 @@ import { useProviderSettings } from './state/useProviderSettings';
 import { useSkillHistory } from './state/useSkillHistory';
 import { useSkillWorkspace } from './state/useSkillWorkspace';
 import './index.css';
+
+// Node types mà SRS trên đó có thể "Phân rã thành Feature" (tạo node con type=feature) —
+// 'screen' theo đúng hierarchy module→screen→feature, và 'module' cho project không dùng
+// cấp screen trung gian (SRS viết thẳng ở module, feature là con trực tiếp của module).
+const FEATURE_PARENT_TYPES = ['module', 'screen'];
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -111,6 +117,8 @@ function App() {
   const [larkLinkOpen, setLarkLinkOpen] = useState(false);
   const [larkLinkUrl, setLarkLinkUrl] = useState('');
   const [larkLinking, setLarkLinking] = useState(false);
+  const [decomposeResult, setDecomposeResult] = useState(null);
+  const [decomposing, setDecomposing] = useState(false);
 
   const projectTree = useProjectTree(setToast);
   const providers = useProviderSettings(setToast);
@@ -124,6 +132,11 @@ function App() {
   const skill = SKILLS[workspace.activeSkill];
   const testCases = workspace.output?.testCases || [];
   const skipNextHistorySync = useRef(false);
+
+  const srsMarkdownForActions = workspace.activeSkill === 'srs' ? String(workspace.output || workspace.rawOutput || '') : '';
+  const canDecomposeFeatures = Boolean(srsMarkdownForActions.trim())
+    && FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type)
+    && parseClarificationQuestions(srsMarkdownForActions).length === 0;
 
   useEffect(() => {
     // Chuyển skill sang tab khác (ví dụ nút "Viết Test Case →") load lại history
@@ -231,6 +244,7 @@ function App() {
             systemPrompt: QUALITY_SYSTEM_PROMPT,
             userPrompt: buildQualityPrompt(cases, requirement),
             nodeId: projectTree.activeNodeId,
+            expectJson: true,
           });
       const review = parseAiJson(generated.output);
       setQualityReview(review);
@@ -312,6 +326,7 @@ function App() {
             userPrompt: skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), { ...workspace.options, hasImage }),
             nodeId: projectTree.activeNodeId,
             image: hasImage ? { mediaType: workspace.image.mediaType, data: workspace.image.data } : undefined,
+            expectJson: skill.output === 'testcase',
           });
 
       const parsed = skill.output === 'testcase' ? parseAiJson(generated.output) : stripCodeFence(generated.output);
@@ -323,9 +338,6 @@ function App() {
       setToast(`Đã sinh output bằng ${generated.provider}`);
       if (workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases) && parsed.testCases.length) {
         await runQualityCheck(parsed.testCases, workspace.input);
-      }
-      if (workspace.activeSkill === 'srs' && projectTree.activeNode?.type === 'screen') {
-        await decomposeSrs(parsed, generated.provider);
       }
     } catch (e) {
       setToast(`Lỗi: ${e.message}`);
@@ -369,6 +381,7 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
             systemPrompt: skill.system,
             userPrompt: `${buildContext(projectTree.activePath)}\n\n${appendPrompt}`,
             nodeId: projectTree.activeNodeId,
+            expectJson: true,
           });
       const parsedNew = parseAiJson(generated.output);
       const newCases = renumberNewCases(existingCases, parsedNew.testCases || []);
@@ -402,15 +415,18 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
 
   async function handleClarificationSubmit(answers) {
     if (workspace.activeSkill !== 'srs') return;
-    
-    const answerMarkdown = "\n\n### CÂU TRẢ LỜI LÀM RÕ:\n" + 
+
+    const answerMarkdown = "### CÂU TRẢ LỜI LÀM RÕ:\n" +
       Object.entries(answers)
         .map(([qLabel, qAnswer]) => `- **${qLabel}**: ${qAnswer}`)
         .join('\n');
-        
-    const nextRequirement = workspace.input.trim() + answerMarkdown;
+
+    // Giữ nguyên bản SRS/câu hỏi trước đó — dùng làm cơ sở cho vòng chốt thay vì
+    // phân tích lại input gốc từ đầu (nhanh hơn, và AI không hỏi lại câu đã trả lời).
+    const previousSrsText = String(workspace.output || workspace.rawOutput || '');
+    const nextRequirement = workspace.input.trim() + "\n\n" + answerMarkdown;
     workspace.setSkillInput(nextRequirement);
-    
+
     setTimeout(async () => {
       dismissReview();
       setLoading(true);
@@ -420,7 +436,7 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
           : await generateAiOutput({
               skill: 'srs',
               systemPrompt: skill.system,
-              userPrompt: skill.buildPrompt(nextRequirement, buildContext(projectTree.activePath), { ...workspace.options, hasImage: false }),
+              userPrompt: skill.buildFinalizePrompt(previousSrsText, answerMarkdown, buildContext(projectTree.activePath)),
               nodeId: projectTree.activeNodeId,
             });
 
@@ -428,9 +444,6 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
         workspace.setSkillOutput(parsed, generated.output);
         await saveSkillRun(nextRequirement, parsed, generated.output, generated.provider);
         setToast(`Đã cập nhật SRS bằng ${generated.provider}`);
-        if (projectTree.activeNode?.type === 'screen') {
-          await decomposeSrs(parsed, generated.provider);
-        }
       } catch (e) {
         setToast(`Lỗi: ${e.message}`);
       } finally {
@@ -439,13 +452,28 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     }, 50);
   }
 
+  // Được gọi thủ công từ nút "Phân rã thành Feature" trên Output (sau khi user
+  // xác nhận SRS đã ổn) — KHÔNG tự chạy ngay sau khi Gen SRS xong nữa, vì user
+  // muốn tự quyết định lúc nào mới bóc tách thay vì AI tự ý làm luôn.
+  async function handleDecomposeFeatures() {
+    const srsContent = String(workspace.output || workspace.rawOutput || '');
+    if (!srsContent.trim() || !projectTree.activeNodeId) return;
+    setDecomposing(true);
+    try {
+      await decomposeSrs(srsContent);
+    } finally {
+      setDecomposing(false);
+    }
+  }
+
   async function decomposeSrs(srsContent, provider) {
     if (!projectTree.activeNodeId) return;
-    setToast('Đang phân tách SRS thành các Feature...');
+    setToast('Đang phân rã SRS thành các Feature...');
+    setDecomposeResult(null);
     try {
       const systemPrompt = SKILLS.srsdecomposer.system;
       const userPrompt = SKILLS.srsdecomposer.buildPrompt(srsContent, buildContext(projectTree.activePath));
-      
+
       const generated = demoMode
         ? { output: JSON.stringify([{ name: 'Quản lý sản phẩm con', srsSegment: '## Đặc tả con' }]), provider: 'demo' }
         : await generateAiOutput({
@@ -453,55 +481,61 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
             systemPrompt,
             userPrompt,
             nodeId: projectTree.activeNodeId,
+            expectJson: true,
           });
-      
+
       const features = parseAiJson(generated.output);
       if (!Array.isArray(features)) {
         console.error('Features decomp did not return array:', features);
+        setDecomposeResult({ status: 'error', message: 'AI không trả về danh sách feature hợp lệ.' });
         return;
       }
-      
+
       let createdCount = 0;
+      const createdNames = [];
       for (const feature of features) {
         if (!feature.name || !feature.srsSegment) continue;
-        
-        const exists = projectTree.nodes.some(n => 
-          n.parentId === projectTree.activeNodeId && 
+
+        const exists = projectTree.nodes.some(n =>
+          n.parentId === projectTree.activeNodeId &&
           n.name.trim().toLowerCase() === feature.name.trim().toLowerCase()
         );
         if (exists) continue;
-        
+
         const created = await createNodeApi({
           parentId: projectTree.activeNodeId,
           type: 'feature',
           name: feature.name.trim(),
-          context: `Đặc tả bóc tách từ Screen: ${projectTree.activeNode.name}`,
+          context: `Đặc tả bóc tách từ: ${projectTree.activeNode.name}`,
         });
-        
+
         await createSkillRun({
           nodeId: created.id,
           skill: 'srs',
           title: `SRS Phân rã: ${feature.name.trim()}`,
-          input: 'Được bóc tách tự động từ Screen SRS',
+          input: 'Được bóc tách từ SRS của node cha',
           output: feature.srsSegment,
           rawOutput: feature.srsSegment,
           provider: generated.provider
         });
         createdCount++;
+        createdNames.push(feature.name.trim());
       }
-      
+
       await projectTree.refreshTree();
-      setToast(`Đã tự động tạo và bóc tách ${createdCount} Feature thành công!`);
+      setToast(`Đã tạo và bóc tách ${createdCount} Feature thành công!`);
+      setDecomposeResult({ status: 'done', count: createdCount, total: features.length, names: createdNames });
     } catch (e) {
       console.error('Failed to decompose SRS:', e);
       setToast(`Lỗi phân tách Feature: ${e.message}`);
+      setDecomposeResult({ status: 'error', message: e.message });
     }
   }
 
   async function handleGenAllTC() {
     const childFeatures = projectTree.nodes.filter(n => n.parentId === projectTree.activeNodeId && n.type === 'feature');
     if (!childFeatures.length) {
-      setToast('Không có Feature con nào dưới Screen này để sinh Test Case');
+      setToast('Không có Feature con nào dưới node này để sinh Test Case');
       return;
     }
     
@@ -523,15 +557,16 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
         return false;
       }
 
-      const srsContent = latestSrs.output_json || latestSrs.rawOutput;
+      const srsContent = latestSrs.output || latestSrs.rawOutput;
 
       const generated = demoMode
         ? { output: DEMO_OUTPUTS.testcase, provider: 'demo' }
         : await generateAiOutput({
             skill: 'testcase',
             systemPrompt: SKILLS.testcase.system,
-            userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { priority: 'High', types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
+            userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
             nodeId: feature.id,
+            expectJson: true,
           });
 
       const parsed = parseAiJson(generated.output);
@@ -849,7 +884,7 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               <p>{projectTree.activeNode?.context || 'Chọn hoặc tạo project/module/screen/feature để output có đúng ngữ cảnh.'}</p>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {projectTree.activeNode?.type === 'screen' && (
+              {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
                 <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
                   {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
                 </button>
@@ -859,6 +894,26 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               </button>
             </div>
           </div>
+
+          {decomposeResult && workspace.activeSkill === 'srs' && FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                border: `1px solid ${decomposeResult.status === 'error' ? '#e74c3c' : '#2ecc71'}`,
+                background: decomposeResult.status === 'error' ? 'rgba(231, 76, 60, 0.08)' : 'rgba(46, 204, 113, 0.08)',
+                padding: '10px 16px', borderRadius: 8, marginBottom: 12,
+              }}
+            >
+              <span style={{ color: decomposeResult.status === 'error' ? '#e74c3c' : '#2ecc71', fontWeight: 600, fontSize: 13 }}>
+                {decomposeResult.status === 'error'
+                  ? `⚠ Bóc tách Feature thất bại: ${decomposeResult.message}`
+                  : decomposeResult.count > 0
+                    ? `✅ Đã bóc tách ${decomposeResult.count} Feature mới: ${decomposeResult.names.join(', ')}`
+                    : '⚠ Không có Feature mới nào được tạo (có thể đã tồn tại sẵn, hoặc SRS chưa đủ chi tiết để bóc tách).'}
+              </span>
+              <button type="button" className="btn-secondary" onClick={() => setDecomposeResult(null)}>Ẩn</button>
+            </div>
+          )}
 
           <section className="panel">
             <div className="panel-header">
@@ -933,6 +988,16 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 {workspace.activeSkill === 'srs' && (workspace.output || workspace.rawOutput) && (
                   <button className="btn-primary" onClick={sendSrsToTestCase} title="Chuyển nội dung SRS sang skill Test Cases">
                     Viết Test Case →
+                  </button>
+                )}
+                {canDecomposeFeatures && (
+                  <button
+                    className="btn-primary"
+                    onClick={handleDecomposeFeatures}
+                    disabled={decomposing}
+                    title="Tách tài liệu SRS này thành từng Feature con và tạo node tương ứng trong cây dự án"
+                  >
+                    {decomposing ? 'Đang phân rã...' : 'Phân rã thành Feature'}
                   </button>
                 )}
                 {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && testCases.length > 0 && (

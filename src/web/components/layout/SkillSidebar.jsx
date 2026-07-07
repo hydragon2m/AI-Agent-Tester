@@ -25,7 +25,7 @@ export function SkillSidebar({
         <button className="btn-toggle-sidebar" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>‹</button>
       </div>
       <nav className="skill-nav">
-        {Object.entries(SKILLS).map(([key, item]) => (
+        {Object.entries(SKILLS).filter(([key]) => key !== 'srsdecomposer').map(([key, item]) => (
           <button key={key} className={`skill-btn ${activeSkill === key ? 'active' : ''}`} onClick={() => setActiveSkill(key)} title={`${item.label} — ${item.desc}`}>
             <span className="skill-icon-text">{item.icon}</span>
             <span className="skill-info">

@@ -1,7 +1,6 @@
-import { ProviderPills } from '../providers/ProviderPills';
 import hydraLogo from '../../hydra-logo.png';
 
-export function AppHeader({ demoMode, setDemoMode, providerStatus, onOpenSettings }) {
+export function AppHeader({ demoMode, setDemoMode, onOpenSettings }) {
   return (
     <header className="header">
       <div className="header-inner">
@@ -16,7 +15,6 @@ export function AppHeader({ demoMode, setDemoMode, providerStatus, onOpenSetting
           <button className={`btn-secondary ${demoMode ? 'active' : ''}`} onClick={() => setDemoMode(v => !v)}>
             Demo
           </button>
-          <ProviderPills status={providerStatus} demoMode={demoMode} />
           <button className="btn-icon" onClick={onOpenSettings} title="Provider settings">⚙</button>
         </div>
       </div>

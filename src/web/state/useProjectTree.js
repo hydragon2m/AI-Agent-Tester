@@ -100,6 +100,7 @@ export function useProjectTree(onToast) {
     renameNode,
     deleteNode,
     importNodes,
+    refreshTree,
   };
 }
 
