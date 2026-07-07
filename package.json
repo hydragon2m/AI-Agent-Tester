@@ -8,7 +8,8 @@
     "build": "vite build",
     "start": "node src/server/app.js",
     "check": "node --check src/server/app.js && npm run build",
-    "test": "npm run check"
+    "test": "npm run check",
+    "tauri": "tauri"
   },
   "keywords": [],
   "author": "",
