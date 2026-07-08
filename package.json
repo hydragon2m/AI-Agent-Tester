@@ -1,0 +1,46 @@
+{
+  "name": "prototype",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/server/app.js",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "start": "node src/server/app.js",
+    "check": "node --check src/server/app.js && npm run build",
+    "test": "npm run check",
+    "tauri": "tauri",
+    "pkg:server": "pkg src/server/app.js --out-path src-tauri/binaries --no-bytecode --public --public-packages \"*\""
+  },
+  "pkg": {
+    "scripts": "src/server/**/*.js",
+    "assets": [
+      "src/server/db/schema.sql",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+    ],
+    "targets": ["node20"]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@vitejs/plugin-react": "^4.3.1",
+    "@yao-pkg/pkg": "^5.15.0",
+    "vite": "^5.4.1"
+  },
+  "allowScripts": {
+    "better-sqlite3": true,
+    "esbuild@0.21.5": true
+  }
+}
