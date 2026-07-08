@@ -62,6 +62,14 @@ jobs:
             librsvg2-dev \
             patchelf
 
+      - name: Configure node-gyp for Windows
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          npm config set msvs_version 2022
+          npm install -g node-gyp
+          node-gyp install
+
       - name: Install Node.js dependencies
         run: npm ci
 
