@@ -6,18 +6,58 @@ const PROVIDER_META = {
   gemini: { label: 'Gemini' },
   claude: { label: 'Claude' },
   openai: { label: 'GPT-4o' },
+  codex: { label: 'Codex' },
 };
 
-const { getActiveKey, getProviderSettings } = require('./provider.service');
+const { getActiveKey, getProviderSettings, getProviderDetails } = require('./provider.service');
 
 // Fallback mặc định khi provider chưa có priority trong DB — KHÔNG đảo (CLAUDE.md)
-const DEFAULT_ORDER = ['claude', 'gemini', 'openai'];
+const DEFAULT_ORDER = ['claude', 'gemini', 'openai', 'codex'];
+
+async function callCodex(systemPrompt, userContent, key, apiBase, modelName, image, expectJson = false) {
+  const baseUrl = apiBase || 'https://api.openai.com/v1';
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const userMessageContent = image
+    ? [
+        { type: 'text', text: userContent },
+        { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}` } },
+      ]
+    : userContent;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: modelName || 'gpt-4o',
+      max_tokens: expectJson ? 16384 : 8192,
+      temperature: 0.4,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessageContent },
+      ],
+      ...(expectJson ? { response_format: { type: 'json_object' } } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const errMsg = err?.error?.message || `HTTP ${res.status}`;
+    throw new Error(errMsg);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
 
 async function callAI(systemPrompt, userContent, image, expectJson = false) {
   // Query DB keys first, fall back to environment variables
   const dbGeminiKey = await getActiveKey('gemini');
   const dbClaudeKey = await getActiveKey('claude');
   const dbOpenaiKey = await getActiveKey('openai');
+  const codexDetails = await getProviderDetails('codex');
 
   const providers = {
     gemini: { 
@@ -31,6 +71,12 @@ async function callAI(systemPrompt, userContent, image, expectJson = false) {
     openai: { 
       key: dbOpenaiKey || process.env.OPENAI_API_KEY, 
       enabled: !!(dbOpenaiKey || process.env.OPENAI_API_KEY) 
+    },
+    codex: { 
+      key: codexDetails?.key || process.env.CODEX_API_KEY, 
+      enabled: !!(codexDetails?.enabled || process.env.CODEX_API_KEY),
+      api_base: codexDetails?.api_base || process.env.CODEX_API_BASE_URL || 'https://api.openai.com/v1',
+      model_name: codexDetails?.model_name || process.env.CODEX_MODEL || 'gpt-4o'
     }
   };
 
@@ -61,6 +107,17 @@ async function callAI(systemPrompt, userContent, image, expectJson = false) {
       if (provider === 'gemini') result = await callGemini(systemPrompt, userContent, key, 0, image, expectJson);
       else if (provider === 'claude') result = await callClaude(systemPrompt, userContent, key, image);
       else if (provider === 'openai') result = await callOpenAI(systemPrompt, userContent, key, 0, image, expectJson);
+      else if (provider === 'codex') {
+        result = await callCodex(
+          systemPrompt,
+          userContent,
+          key,
+          providers.codex.api_base,
+          providers.codex.model_name,
+          image,
+          expectJson
+        );
+      }
 
       return {
         provider,
@@ -69,14 +126,11 @@ async function callAI(systemPrompt, userContent, image, expectJson = false) {
     } catch (e) {
       console.error(`[AI Router Service] Error with ${provider}:`, e.message);
       lastError = e;
-      const isExhausted = e.message === 'QUOTA_EXCEEDED' || e.message.includes('NO_KEY');
-      if (isExhausted) {
-        const nextIdx = available.indexOf(provider) + 1;
-        if (nextIdx < available.length) {
-          console.log(`[AI Router Service] ${PROVIDER_META[provider].label} exhausted/unavailable. Falling back to next...`);
-          await new Promise(r => setTimeout(r, 1000));
-          continue;
-        }
+      const nextIdx = available.indexOf(provider) + 1;
+      if (nextIdx < available.length) {
+        console.log(`[AI Router Service] ${PROVIDER_META[provider].label} failed (${e.message}). Falling back to next...`);
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
       } else {
         throw e;
       }

@@ -15,13 +15,13 @@ router.get('/settings', async (req, res) => {
 
 // Save or update provider settings
 router.post('/settings', async (req, res) => {
-  const { provider, key, enabled, priority } = req.body;
+  const { provider, key, enabled, priority, api_base, model_name } = req.body;
   if (!provider) {
     return res.status(400).json({ error: 'provider is required' });
   }
 
   try {
-    await saveProviderSetting(provider, key, enabled, priority);
+    await saveProviderSetting(provider, key, enabled, priority, api_base, model_name);
     const settings = await getProviderSettings();
     res.json(settings);
   } catch (e) {

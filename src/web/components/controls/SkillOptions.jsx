@@ -83,5 +83,11 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
     );
   }
 
-  return null;
+  return (
+    <div className="skill-options-row h-[32px] flex items-center">
+      <span className="text-[10.5px] text-zinc-500 font-normal italic">
+        Bug Analyzer không yêu cầu cấu hình thêm.
+      </span>
+    </div>
+  );
 }

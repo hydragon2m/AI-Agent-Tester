@@ -113,6 +113,8 @@ async function runColumnMigrations() {
     await ensureColumn('nodes', 'abbreviation', "TEXT DEFAULT ''");
     await ensureColumn('projects', 'system_id', 'TEXT');
     await ensureColumn('test_cases', 'stage', "TEXT DEFAULT ''");
+    await ensureColumn('provider_settings', 'api_base', "TEXT DEFAULT ''");
+    await ensureColumn('provider_settings', 'model_name', "TEXT DEFAULT ''");
 }
 
 // ── Import từ JSON (migration một lần) ───────────────────────────────────────

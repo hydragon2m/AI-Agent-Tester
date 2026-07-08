@@ -6,9 +6,8 @@ import { fetchLarkLinkApi, linkLarkProjectApi, pushToLarkApi } from './backend-a
 import { createNodeApi } from './backend-api/nodes.api';
 import { createSkillRun, fetchSkillRuns } from './backend-api/skill-runs.api';
 import { SkillOptions } from './components/controls/SkillOptions';
-import { AppHeader } from './components/layout/AppHeader';
 import { ProjectSidebar } from './components/layout/ProjectSidebar';
-import { SkillSidebar } from './components/layout/SkillSidebar';
+import { HistoryItem } from './components/layout/HistoryItem';
 import { LarkLinkModal } from './components/output/LarkLinkModal';
 import { ManualPromptModal } from './components/output/ManualPromptModal';
 import { OutputPanel } from './components/output/OutputPanel';
@@ -29,6 +28,9 @@ import { useLarkMapping } from './state/useLarkMapping';
 import { buildContext, useProjectTree } from './state/useProjectTree';
 import { useProviderSettings } from './state/useProviderSettings';
 import { useSkillHistory } from './state/useSkillHistory';
+import { Button } from './components/ui/Button';
+import { DropdownMenu, DropdownMenuItem } from './components/ui/DropdownMenu';
+import { ChevronDown, Download, Share2, Copy, Save, Play, CheckSquare, Sparkles, FolderTree, History, X } from 'lucide-react';
 import { useSkillWorkspace } from './state/useSkillWorkspace';
 import './index.css';
 
@@ -135,6 +137,7 @@ function App() {
   const workspace = useSkillWorkspace();
   const skillHistory = useSkillHistory(projectTree.activeNodeId, workspace.activeSkill);
   const [activeHistoryId, setActiveHistoryId] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [pushingToLark, setPushingToLark] = useState(false);
   const lark = useLarkMapping();
   const larkConfig = useLarkConfig(setToast);
@@ -958,13 +961,6 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
   return (
     <>
       <div className="bg-grid" />
-      <AppHeader
-        demoMode={demoMode}
-        setDemoMode={setDemoMode}
-        providerStatus={providers.providerStatus}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-
       <main className="main web-shell">
         <ProjectSidebar
           nodes={projectTree.nodes}
@@ -978,32 +974,49 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           onCreateProject={(systemId, systemName) => setCreateProject({ systemId, systemName })}
           onExportFile={handleExportScopeFile}
           onExportLark={handleExportScopeLark}
+          demoMode={demoMode}
+          setDemoMode={setDemoMode}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
-        {!isProjectNode && (
-          <SkillSidebar
-            activeSkill={workspace.activeSkill}
-            setActiveSkill={workspace.setActiveSkill}
-            history={skillHistory.runs}
-            historyLoading={skillHistory.loading}
-            activeHistoryId={activeHistoryId}
-            hasActiveNode={!!projectTree.activeNodeId}
-            visibleSkillIds={visibleSkillIds}
-            onViewHistory={viewHistoryItem}
-            onRenameHistory={renameHistoryItem}
-            onDeleteHistory={deleteHistoryItem}
-            onRestoreHistory={restoreHistoryItem}
-          />
-        )}
-
         <section className="web-workspace">
-          <div className="workspace-header">
-            <div>
-              <div className="eyebrow">Selected Context</div>
-              <h1>{projectTree.activeNode ? projectTree.activePath.map(n => n.name).join(' / ') : 'Chưa chọn node'}</h1>
-              <p>{projectTree.activeNode?.context || 'Chọn hoặc tạo project/module/screen/feature để output có đúng ngữ cảnh.'}</p>
+          {!isProjectNode && projectTree.activeNode && (
+            <div className="sticky top-0 z-30 bg-[#09090b] flex items-center justify-between h-[52px] border-b border-zinc-800 -mx-6 px-6 mb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider shrink-0">Skills</span>
+                <div className="inline-flex h-9 items-center justify-start rounded-lg bg-zinc-900/80 p-1 text-zinc-400 w-max max-w-full overflow-x-auto border border-zinc-800/40">
+                  {Object.entries(SKILLS)
+                    .filter(([key]) => key !== 'srsdecomposer' && key !== 'teststrategy')
+                    .filter(([key]) => !visibleSkillIds || visibleSkillIds.includes(key))
+                    .map(([key, item]) => {
+                      const active = workspace.activeSkill === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => workspace.setActiveSkill(key)}
+                          className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-1 text-xs font-medium transition-all ${active ? 'bg-zinc-800 text-slate-100 shadow-sm font-semibold' : 'hover:text-zinc-200'}`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+              
+              {projectTree.activeNodeId && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-1.5 h-8 text-[11px] border-zinc-800 hover:bg-zinc-800 hover:text-white shrink-0 animate-in fade-in duration-200"
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  <History className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Lịch sử ({skillHistory.runs?.length || 0})</span>
+                </Button>
+              )}
             </div>
-          </div>
+          )}
 
           {isProjectNode && (
             <StrategyPanel
@@ -1060,20 +1073,34 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           )}
 
           <section className="panel">
-            <div className="panel-header">
+            <div className="panel-header flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
               <div>
                 <span className="step-badge">Bước 1 · Requirement</span>
-                <h2>{skill.label}</h2>
-                <span>{skill.desc}</span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <h2 className="text-sm font-semibold text-slate-100">{skill.label}</h2>
+                  {projectTree.activeNode && (
+                    <span className="text-xs text-zinc-500 font-normal">
+                      ({projectTree.activePath.map(n => n.name).join(' / ')})
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-zinc-400 block mt-0.5">{skill.desc}</span>
               </div>
-              <button className="btn-secondary" onClick={() => workspace.setSkillInput(EXAMPLES[workspace.activeSkill] || '')}>Sample</button>
+              <div className="flex items-center gap-2">
+                {workspace.activeSkill === 'testcase' && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-7 text-xs border-zinc-800 hover:bg-zinc-800 hover:text-white"
+                    onClick={copyManualPrompt}
+                  >
+                    Copy Manual Prompt
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="h-7 text-xs border-zinc-800 hover:bg-zinc-800 hover:text-white" onClick={() => workspace.setSkillInput(EXAMPLES[workspace.activeSkill] || '')}>Sample</Button>
+              </div>
             </div>
             <SkillOptions activeSkill={workspace.activeSkill} options={workspace.options} setOptions={workspace.setOptions} />
-            {workspace.activeSkill === 'testcase' && (
-              <div className="testcase-utility-row">
-                <button className="btn-secondary" onClick={copyManualPrompt}>Copy Manual Prompt</button>
-              </div>
-            )}
             {skill.supportsImage && (
               <div className="image-upload-row">
                 <label className="btn-secondary image-upload-btn">
@@ -1104,25 +1131,26 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                   onChange={e => setSupplementNote(e.target.value)}
                   placeholder="Bổ sung case còn thiếu, hoặc trả lời câu hỏi AI nêu ra ở Output..."
                 />
-                <button
-                  className="btn-secondary"
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={appendTestCases}
                   disabled={!supplementNote.trim() || loading}
                   title="Chỉ thêm test case mới vào danh sách hiện có, không sinh lại từ đầu"
                 >
                   {loading ? 'Đang xử lý...' : 'Bổ sung thêm'}
-                </button>
+                </Button>
               </div>
             )}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+            <div className="flex items-center justify-end gap-2 mt-3">
               {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
-                <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
+                <Button variant="outline" size="sm" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
                   {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
-                </button>
+                </Button>
               )}
-              <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
+              <Button variant="default" size="sm" onClick={generate} disabled={loading || batchGenLoading}>
                 {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
-              </button>
+              </Button>
             </div>
           </section>
 
@@ -1133,58 +1161,127 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 <h2>Output</h2>
                 <span>{workspace.activeSkill === 'testcase' ? `${testCases.length} case` : skill.output}</span>
               </div>
-              <div className="output-actions-react">
-                <button className="btn-secondary" onClick={copyOutput} disabled={!workspace.output && !workspace.rawOutput}>Copy</button>
-                {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={() => exportOutput('csv')} disabled={!testCases.length}>CSV</button>}
-                {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={() => exportOutput('md')} disabled={!testCases.length}>MD</button>}
-                {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={copyForLark} disabled={!testCases.length}>Copy Lark</button>}
-                <button className="btn-secondary" onClick={() => exportOutput()} disabled={!workspace.output && !workspace.rawOutput}>Export</button>
-                {projectTree.activeNodeId && projectTree.activeNode && (
-                  <button
-                    className="btn-secondary"
-                    title="Tải toàn bộ test case đã lưu của node này (kèm mọi node con) ra CSV/Markdown"
-                    onClick={() => handleExportScopeFile({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}
-                  >⤓ Export cả nhánh</button>
+              <div className="output-actions-react flex items-center gap-2 flex-wrap">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={copyOutput} 
+                  disabled={!workspace.output && !workspace.rawOutput}
+                >
+                  <Copy className="w-3.5 h-3.5 mr-1.5" />
+                  Copy
+                </Button>
+
+                {workspace.activeSkill === 'testcase' && testCases.length > 0 && (
+                  <DropdownMenu 
+                    align="right"
+                    trigger={
+                      <Button variant="outline" size="sm">
+                        <Download className="w-3.5 h-3.5 mr-1.5" />
+                        Tải xuống
+                        <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                    }
+                  >
+                    <DropdownMenuItem onClick={() => exportOutput('csv')}>
+                      Export CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => exportOutput('md')}>
+                      Export Markdown (MD)
+                    </DropdownMenuItem>
+                    {projectTree.activeNodeId && projectTree.activeNode && (
+                      <DropdownMenuItem onClick={() => handleExportScopeFile({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}>
+                        Export cả nhánh
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenu>
                 )}
-                {projectTree.activeNodeId && projectTree.activeNode && (
-                  <button
-                    className="btn-secondary"
-                    title="Đẩy toàn bộ test case đã lưu của node này (kèm mọi node con) lên Lark Base"
-                    onClick={() => handleExportScopeLark({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}
-                  >🦊 Lark cả nhánh</button>
+
+                {workspace.activeSkill === 'testcase' && testCases.length > 0 && (
+                  <DropdownMenu 
+                    align="right"
+                    trigger={
+                      <Button variant="outline" size="sm">
+                        <Share2 className="w-3.5 h-3.5 mr-1.5" />
+                        Đồng bộ Lark
+                        <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                    }
+                  >
+                    <DropdownMenuItem onClick={copyForLark}>
+                      Copy Lark HTML
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={openLarkPushModal} disabled={pushingToLark}>
+                      Đẩy lên Lark Base
+                    </DropdownMenuItem>
+                    {projectTree.activeNodeId && projectTree.activeNode && (
+                      <DropdownMenuItem onClick={() => handleExportScopeLark({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}>
+                        Lark cả nhánh
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenu>
                 )}
+
+                {workspace.activeSkill !== 'testcase' && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => exportOutput()} 
+                    disabled={!workspace.output && !workspace.rawOutput}
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Export
+                  </Button>
+                )}
+
                 {workspace.activeSkill === 'srs' && (workspace.output || workspace.rawOutput) && (
-                  <button className="btn-primary" onClick={sendSrsToTestCase} title="Chuyển nội dung SRS sang skill Test Cases">
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={sendSrsToTestCase} 
+                    title="Chuyển nội dung SRS sang skill Test Cases"
+                  >
                     Viết Test Case →
-                  </button>
+                  </Button>
                 )}
+
                 {canDecomposeFeatures && (
-                  <button
-                    className="btn-primary"
-                    onClick={handleDecomposeFeatures}
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={handleDecomposeFeatures} 
                     disabled={decomposing}
                     title="Tách tài liệu SRS này thành từng Feature con và tạo node tương ứng trong cây dự án"
                   >
                     {decomposing ? 'Đang phân rã...' : 'Phân rã thành Feature'}
-                  </button>
+                  </Button>
                 )}
+
                 {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && (
-                  <button className="btn-primary" onClick={handleSaveEditedTestCases} disabled={loading} title="Lưu lại toàn bộ chỉnh sửa test case của node này xuống cơ sở dữ liệu">
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={handleSaveEditedTestCases} 
+                    disabled={loading} 
+                    title="Lưu lại toàn bộ chỉnh sửa test case của node này xuống cơ sở dữ liệu"
+                  >
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
                     {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
-                  </button>
+                  </Button>
                 )}
-                {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && testCases.length > 0 && (
-                  <button className="btn-secondary" onClick={openLarkPushModal} disabled={pushingToLark} title="Xác nhận link Lark Base rồi đẩy các test case đã duyệt lên">
-                    {pushingToLark ? 'Đang đẩy...' : 'Đẩy lên Lark'}
-                  </button>
-                )}
+
                 {workspace.activeSkill === 'testcase' && testCases.length > 0 && !qualityReview && (
-                  <button className="btn-secondary" onClick={() => runQualityCheck(testCases, workspace.input)} disabled={loading}>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => runQualityCheck(testCases, workspace.input)} 
+                    disabled={loading}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
                     Đánh giá chất lượng
-                  </button>
+                  </Button>
                 )}
-              </div>
-            </div>
+              </div>            </div>
             <OutputPanel
               activeSkill={workspace.activeSkill}
               output={workspace.output}
@@ -1208,6 +1305,39 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           )}
         </section>
       </main>
+      {historyOpen && (
+        <div className="fixed inset-0 z-[160] flex justify-end">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setHistoryOpen(false)} />
+          <div className="relative w-80 max-w-full bg-zinc-950 border-l border-zinc-800 p-5 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-50 uppercase tracking-wider">
+                <History className="w-4 h-4 text-indigo-400" />
+                Lịch sử (History)
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setHistoryOpen(false)} className="h-8 w-8 text-slate-400 hover:text-white rounded-md">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {!projectTree.activeNodeId && <div className="text-center text-xs text-zinc-500 py-8">Chọn một node để xem lịch sử</div>}
+              {projectTree.activeNodeId && skillHistory.loading && <div className="text-center text-xs text-zinc-500 py-8">Đang tải...</div>}
+              {projectTree.activeNodeId && !skillHistory.loading && skillHistory.runs.length === 0 && <div className="text-center text-xs text-zinc-500 py-8">Chưa có lịch sử chạy</div>}
+              {projectTree.activeNodeId && skillHistory.runs.map(item => (
+                <HistoryItem
+                  key={item.id}
+                  item={item}
+                  active={item.id === activeHistoryId}
+                  onView={(itm) => { viewHistoryItem(itm); setHistoryOpen(false); }}
+                  onRename={renameHistoryItem}
+                  onDelete={deleteHistoryItem}
+                  onRestore={restoreHistoryItem}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {settingsOpen && (
         <ProviderSettingsModal

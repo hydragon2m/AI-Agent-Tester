@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { sortTestCases } from '../../features/testcase/testcase-quality';
+import { Select } from '../ui/Select';
+import { Trash2, Plus } from 'lucide-react';
 
 const TYPES = ['Positive', 'Negative', 'Boundary', 'Edge Case', 'Security', 'UI/UX'];
 const PRIORITIES = ['High', 'Medium', 'Low'];
@@ -63,7 +65,14 @@ function getNextTestCaseId(existingCases, nodePathModule) {
 // nodePath = { module, screen, feature } lấy từ cây (context của node đang chọn) — cùng
 // nguồn với dữ liệu đẩy lên Lark / export, hiển thị read-only để bảng "đầy đủ" cột.
 export function TestCaseTable({ testCases, onUpdate, nodePath = {} }) {
-  const [colWidths, setColWidths] = useState(DEFAULT_COL_WIDTHS);
+  const [colWidths, setColWidths] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hydra-tc-col-widths');
+      return saved ? JSON.parse(saved) : DEFAULT_COL_WIDTHS;
+    } catch {
+      return DEFAULT_COL_WIDTHS;
+    }
+  });
   const [page, setPage] = useState(0);
   const dragRef = useRef(null); // { key, startX, startW }
   const wrapperRef = useRef(null);
@@ -76,7 +85,13 @@ export function TestCaseTable({ testCases, onUpdate, nodePath = {} }) {
       const d = dragRef.current;
       if (!d) return;
       const next = Math.max(60, d.startW + (ev.clientX - d.startX));
-      setColWidths(prev => ({ ...prev, [d.key]: next }));
+      setColWidths(prev => {
+        const updated = { ...prev, [d.key]: next };
+        try {
+          localStorage.setItem('hydra-tc-col-widths', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
     };
     const up = () => {
       dragRef.current = null;
@@ -152,15 +167,8 @@ export function TestCaseTable({ testCases, onUpdate, nodePath = {} }) {
   const textareaStyle = {
     ...inputStyle,
     minHeight: '60px',
-    resize: 'vertical',
+    resize: 'none', // Locked vertical resizing to prevent layout breaking
     fontFamily: 'inherit',
-  };
-
-  const selectStyle = {
-    ...inputStyle,
-    background: 'var(--panel-bg-alt, #222)',
-    border: '1px solid var(--border-color, #444)',
-    cursor: 'pointer',
   };
 
   // Cell context read-only (Module/Screen/Feature từ cây): hiện gọn + hover xem full.
@@ -244,31 +252,28 @@ export function TestCaseTable({ testCases, onUpdate, nodePath = {} }) {
                     />
                   </td>
                   <td>
-                    <select
-                      style={selectStyle}
+                    <Select
                       value={tc.type || 'Positive'}
                       onChange={e => handleCellChange(idx, 'type', e.target.value)}
                     >
                       {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    </Select>
                   </td>
                   <td>
-                    <select
-                      style={selectStyle}
+                    <Select
                       value={tc.priority || 'Medium'}
                       onChange={e => handleCellChange(idx, 'priority', e.target.value)}
                     >
                       {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                    </Select>
                   </td>
                   <td>
-                    <select
-                      style={selectStyle}
+                    <Select
                       value={tc.suite || 'Regression'}
                       onChange={e => handleCellChange(idx, 'suite', e.target.value)}
                     >
                       {SUITES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    </Select>
                   </td>
                   <td>
                     <textarea
@@ -301,24 +306,22 @@ export function TestCaseTable({ testCases, onUpdate, nodePath = {} }) {
                     />
                   </td>
                   <td>
-                    <select
-                      style={selectStyle}
+                    <Select
                       value={tc.status || ''}
                       onChange={e => handleCellChange(idx, 'status', e.target.value)}
                       title="Trạng thái chạy test (đồng bộ với Lark + Release Check)"
                     >
                       {STATUSES.map(s => <option key={s || 'none'} value={s}>{s || '—'}</option>)}
-                    </select>
+                    </Select>
                   </td>
-                  <td style={{ textAlign: 'center' }}>
+                  <td>
                     <button
                       type="button"
-                      className="btn-danger-icon"
+                      className="flex items-center justify-center mx-auto text-red-500 hover:text-red-400 p-1.5 rounded hover:bg-red-500/10 transition-colors"
                       onClick={() => handleDeleteRow(idx)}
-                      style={{ background: 'transparent', border: 'none', color: '#ff4d4f', cursor: 'pointer', fontSize: '16px' }}
                       title="Xóa dòng này"
                     >
-                      🗑️
+                      <Trash2 className="w-4.5 h-4.5" />
                     </button>
                   </td>
                 </tr>
@@ -329,7 +332,7 @@ export function TestCaseTable({ testCases, onUpdate, nodePath = {} }) {
       </div>
       <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button type="button" className="btn-secondary" onClick={handleAddRow} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          ➕ Thêm Test Case mới
+          <Plus className="w-4 h-4 text-indigo-400" /> Thêm Test Case mới
         </button>
         {totalPages > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>

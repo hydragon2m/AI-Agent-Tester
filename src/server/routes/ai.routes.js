@@ -10,11 +10,13 @@ router.get('/status', async (req, res) => {
   const dbGemini = await getActiveKey('gemini');
   const dbClaude = await getActiveKey('claude');
   const dbOpenai = await getActiveKey('openai');
+  const dbCodex = await getActiveKey('codex');
 
   res.json({
     gemini: { enabled: !!(dbGemini || process.env.GEMINI_API_KEY) },
     claude: { enabled: !!(dbClaude || process.env.CLAUDE_API_KEY) },
-    openai: { enabled: !!(dbOpenai || process.env.OPENAI_API_KEY) }
+    openai: { enabled: !!(dbOpenai || process.env.OPENAI_API_KEY) },
+    codex: { enabled: !!(dbCodex || process.env.CODEX_API_KEY) }
   });
 });
 

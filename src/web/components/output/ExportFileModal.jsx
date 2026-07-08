@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { scopeToCsv, scopeToMarkdown } from '../../features/testcase/testcase-export';
+import { Button } from '../ui/Button';
+import { X, FileSpreadsheet, FileText } from 'lucide-react';
 
 const SCOPE_LABELS = { system: 'Hệ thống', project: 'Project', module: 'Module', screen: 'Screen', feature: 'Feature' };
 
@@ -15,9 +17,6 @@ function download(content, filename, type) {
   URL.revokeObjectURL(url);
 }
 
-// Tải test case của 1 scope (system/project/module/screen/feature) về file.
-// `data` = phản hồi từ exportScopeApi: { scopeType, scopeName, groups[] }.
-// System scope → gộp mọi project vào 1 file, thêm cột "Project Name".
 export function ExportFileModal({ data, onClose, onToast }) {
   const [format, setFormat] = useState('csv');
 
@@ -40,35 +39,52 @@ export function ExportFileModal({ data, onClose, onToast }) {
   }
 
   return (
-    <div className="modal-overlay" style={{ display: 'flex' }}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2>Export Excel/CSV</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
+    <div className="modal-overlay flex items-center justify-center fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm p-4">
+      <div className="modal w-full max-w-md bg-slate-900 border border-border rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="modal-header flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">Export Excel/CSV</h2>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-slate-400 hover:text-white rounded-md">
+            <X className="w-4 h-4" />
+          </Button>
         </div>
-        <div className="modal-body">
-          <p className="pf-hint" style={{ marginTop: 0 }}>
-            Phạm vi: <strong>{SCOPE_LABELS[data?.scopeType] || 'Scope'} · {scopeName}</strong>
-            <br />
-            Tổng: <strong>{total}</strong> test case
-            {includeProjectName ? ` · ${groups.length} project (gộp 1 file, kèm cột Project Name)` : ''}.
-          </p>
-          <div className="pf-field">
-            <label className="pf-label">Định dạng tải về</label>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, cursor: 'pointer' }}>
-              <input type="radio" name="exp-fmt" checked={format === 'csv'} onChange={() => setFormat('csv')} />
-              CSV (mặc định — tương thích Excel)
+        <div className="modal-body p-5 space-y-4">
+          <div className="text-xs text-slate-400 leading-normal space-y-1">
+            <div>Phạm vi: <strong className="text-slate-200">{SCOPE_LABELS[data?.scopeType] || 'Scope'} · {scopeName}</strong></div>
+            <div>Tổng số: <strong className="text-slate-200">{total}</strong> test case</div>
+            {includeProjectName && <div className="text-indigo-400">{groups.length} project (gộp 1 file, kèm cột Project Name)</div>}
+          </div>
+          
+          <div className="pf-field space-y-2 border border-border bg-slate-950/40 p-3.5 rounded-md">
+            <label className="text-xs font-semibold text-slate-350 block mb-2">Định dạng tải về</label>
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input 
+                type="radio" 
+                name="exp-fmt" 
+                checked={format === 'csv'} 
+                onChange={() => setFormat('csv')} 
+                className="border-border bg-slate-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+              />
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span>CSV (mặc định — tương thích Excel)</span>
             </label>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="radio" name="exp-fmt" checked={format === 'md'} onChange={() => setFormat('md')} />
-              Markdown (.md)
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mt-1">
+              <input 
+                type="radio" 
+                name="exp-fmt" 
+                checked={format === 'md'} 
+                onChange={() => setFormat('md')} 
+                className="border-border bg-slate-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+              />
+              <FileText className="w-4 h-4 text-indigo-400" />
+              <span>Markdown (.md)</span>
             </label>
           </div>
-          <div className="modal-actions">
-            <button className="btn-secondary" onClick={onClose}>Đóng</button>
-            <button className="btn-primary" onClick={handleDownload} disabled={!total}>
+
+          <div className="modal-actions flex items-center justify-end gap-2 border-t border-border pt-4 mt-5">
+            <Button variant="ghost" size="sm" onClick={onClose}>Đóng</Button>
+            <Button variant="default" size="sm" onClick={handleDownload} disabled={!total}>
               Tải xuống{total ? ` (${total})` : ''}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

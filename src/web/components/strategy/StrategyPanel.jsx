@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Zap, Bot, Edit2, Check, RefreshCw, AlertCircle, Calendar, ShieldAlert } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { Card } from '../ui/Card';
 import {
   STRATEGY_TEMPLATES,
   getTemplate,
@@ -16,48 +20,50 @@ import {
 
 // Panel Test Strategy hiển thị INLINE trong workspace khi node đang chọn là project.
 // Thay thế hoàn toàn phần skill (Requirement/Output) — project node chỉ có màn này.
-// view: 'loading' | 'current' (đã có strategy) | 'generate' (chọn template) | 'review' (duyệt draft AI).
 export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode, onPlanChanged }) {
-  const projectId = projectNode?.projectId || projectNode?.id;
   const [tab, setTab] = useState('plan'); // 'plan' | 'release'
-  const [view, setView] = useState('loading');
-  const [existing, setExisting] = useState(null);
+  const [view, setView] = useState('loading'); // 'loading' | 'generate' | 'review' | 'current'
+  const [existing, setExisting] = useState(null); // strategy hiện có
   const [template, setTemplate] = useState('feature_addition');
   const [note, setNote] = useState('');
-  const [draft, setDraft] = useState(null);      // { summary, stages, executionPlan, releaseGate, provider }
-  const [stages, setStages] = useState([]);       // stages có thể toggle trong Review
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Tải strategy hiện tại mỗi khi đổi sang 1 project node khác.
+  // review view states
+  const [draft, setDraft] = useState(null);
+  const [stages, setStages] = useState([]);
+
+  const projectId = projectNode?.id || null;
+
   useEffect(() => {
+    if (!projectId) return;
     let alive = true;
-    setDraft(null);
-    setStages([]);
-    if (!projectId) { setView('generate'); return; }
     setView('loading');
     fetchStrategyApi(projectId)
-      .then(s => {
+      .then(strat => {
         if (!alive) return;
-        if (s) { setExisting(s); setView('current'); }
-        else { setExisting(null); setView('generate'); }
+        if (strat) {
+          setExisting(strat);
+          setView('current');
+        } else {
+          setExisting(null);
+          setView('generate');
+        }
       })
       .catch(e => {
         if (!alive) return;
-        onToast?.(`Lỗi tải strategy: ${e.message}`);
-        setExisting(null);
+        onToast?.(`Không tải được strategy: ${e.message}`);
         setView('generate');
       });
-    return () => { alive = false; };
+    return () => { alive = true; };
   }, [projectId]);
 
   async function handleGenerate() {
     setGenerating(true);
     try {
-      const parsed = await onGenerateDraft(template, note);
-      if (!parsed) return;
-      setDraft(parsed);
-      setStages(normalizeStages(parsed.stages, template));
+      const data = await onGenerateDraft(template, note);
+      setDraft(data);
+      setStages(normalizeStages(data.stages || []));
       setView('review');
     } catch (e) {
       onToast?.(`Sinh strategy thất bại: ${e.message}`);
@@ -66,13 +72,15 @@ export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode,
     }
   }
 
-  // Sinh bằng CODE — tức thời, 0 token, không gọi AI. Nạp thẳng cấu hình chuẩn theo template.
   function handleGenerateCode() {
-    const strat = generateDefaultStrategy(template, projectNode?.name, note);
-    setDraft(strat);
-    setStages(normalizeStages(strat.stages, template));
-    setView('review');
-    onToast?.('Đã sinh Test Strategy chuẩn bằng code (0 token) — xem lại & Approve');
+    try {
+      const data = generateDefaultStrategy(template, projectNode.name, note);
+      setDraft(data);
+      setStages(normalizeStages(data.stages || []));
+      setView('review');
+    } catch (e) {
+      onToast?.(`Sinh bằng code thất bại: ${e.message}`);
+    }
   }
 
   function toggleStage(key) {
@@ -125,20 +133,22 @@ export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode,
   }
 
   return (
-    <section className="panel">
-      <div className="panel-header">
+    <section className="panel space-y-5">
+      <div className="panel-header border-b border-zinc-800 pb-4 mb-4 flex items-center justify-between">
         <div>
-          <span className="step-badge">Test Plan</span>
-          <h2>Kế hoạch test — {projectNode?.name || 'Project'}</h2>
-          <span>Cấu hình stage test → quản lý release theo tiến độ</span>
+          <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-500/5 text-[10px] uppercase font-bold tracking-wider mb-2">
+            Test Plan
+          </Badge>
+          <h2 className="text-lg font-bold text-slate-50 tracking-tight mt-1">Kế hoạch test</h2>
+          <span className="text-xs text-zinc-400">Cấu hình stage test → quản lý release theo tiến độ</span>
         </div>
       </div>
 
       <TabBar tab={tab} setTab={setTab} />
 
       {tab === 'plan' && (
-        <div style={{ padding: '4px 2px' }}>
-          {view === 'loading' && <p className="pf-hint">Đang tải kế hoạch test...</p>}
+        <div className="space-y-4">
+          {view === 'loading' && <p className="text-xs text-zinc-500 italic">Đang tải kế hoạch test...</p>}
 
           {view === 'generate' && (
             <GenerateView
@@ -186,7 +196,7 @@ export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode,
 function TabBar({ tab, setTab }) {
   const tabs = [{ key: 'plan', label: 'Kế hoạch test' }, { key: 'release', label: 'Release Check' }];
   return (
-    <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-color, #444)', marginBottom: 8 }}>
+    <div className="inline-flex h-9 items-center justify-center rounded-lg bg-zinc-900 p-1 text-zinc-400 mb-6">
       {tabs.map(t => {
         const active = t.key === tab;
         return (
@@ -194,12 +204,7 @@ function TabBar({ tab, setTab }) {
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
-            style={{
-              padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-              background: 'none', border: 'none', color: active ? 'var(--accent-color, #f0a000)' : 'inherit',
-              borderBottom: `2px solid ${active ? 'var(--accent-color, #f0a000)' : 'transparent'}`,
-              opacity: active ? 1 : 0.7, marginBottom: -1,
-            }}
+            className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3.5 py-1 text-xs font-semibold ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${active ? 'bg-zinc-950 text-zinc-50 shadow-sm' : 'hover:text-zinc-200'}`}
           >
             {t.label}
           </button>
@@ -211,14 +216,14 @@ function TabBar({ tab, setTab }) {
 
 function GenerateView({ template, setTemplate, note, setNote, generating, onGenerate, onGenerateCode, hasExisting, onBack, demoMode }) {
   return (
-    <>
-      <p className="pf-hint" style={{ marginTop: 0 }}>
+    <div className="space-y-4">
+      <p className="text-xs text-zinc-400 leading-normal">
         Chọn loại project → <strong>Sinh bằng Code</strong> (nhanh, 0 token) để lấy cấu hình chuẩn, hoặc <strong>Sinh bằng AI</strong> để AI phân tích ngữ cảnh dự án.
         {demoMode ? ' (Đang ở Demo mode — kết quả AI là mẫu.)' : ''}
       </p>
-      <div className="pf-field">
-        <label className="pf-label">Loại project (template)</label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div className="pf-field flex flex-col gap-1.5">
+        <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">Loại project (template)</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {STRATEGY_TEMPLATES.map(t => {
             const active = t.key === template;
             return (
@@ -226,16 +231,11 @@ function GenerateView({ template, setTemplate, note, setNote, generating, onGene
                 key={t.key}
                 type="button"
                 onClick={() => setTemplate(t.key)}
-                style={{
-                  textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                  border: `1px solid ${active ? 'var(--accent-color, #f0a000)' : 'var(--border-color, #444)'}`,
-                  background: active ? 'rgba(240,160,0,0.10)' : 'var(--panel-bg-alt, #222)',
-                  color: 'var(--text-color, #fff)',
-                }}
+                className={`text-left p-3.5 rounded-lg border cursor-pointer transition-all duration-150 ${active ? 'border-zinc-500 bg-zinc-800/10 text-white' : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700'}`}
               >
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{t.label}</div>
-                <div style={{ fontSize: 11, opacity: 0.7 }}>{t.desc}</div>
-                <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
+                <div className="font-bold text-xs mb-1 text-zinc-100">{t.label}</div>
+                <div className="text-[10px] text-zinc-400 leading-relaxed mb-2">{t.desc}</div>
+                <div className="text-[9px] text-zinc-500">
                   Bật sẵn: {t.enabledByDefault.length ? t.enabledByDefault.join(', ') : '—'}
                 </div>
               </button>
@@ -243,26 +243,26 @@ function GenerateView({ template, setTemplate, note, setNote, generating, onGene
           })}
         </div>
       </div>
-      <div className="pf-field">
-        <label className="pf-label">Ghi chú thêm (tùy chọn)</label>
+      <div className="pf-field flex flex-col gap-1.5">
+        <label className="text-xs font-bold uppercase tracking-wider text-zinc-400">Ghi chú thêm (tùy chọn)</label>
         <textarea
-          className="pf-input"
-          style={{ minHeight: 60, resize: 'vertical' }}
+          className="w-full min-h-[60px] p-3 rounded-md border border-zinc-800 bg-zinc-950 text-slate-100 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-700 resize-none"
           value={note}
           onChange={e => setNote(e.target.value)}
           placeholder="Ràng buộc riêng, deadline, môi trường, phần cần đặc biệt lưu ý..."
         />
       </div>
-      <div className="modal-actions">
-        {onBack && <button className="btn-secondary" onClick={onBack} disabled={generating}>Quay lại</button>}
-        <button className="btn-secondary" onClick={onGenerateCode} disabled={generating} title="Lấy cấu hình chuẩn theo template — tức thời, không tốn token">
-          ⚡ Sinh bằng Code (0 token)
-        </button>
-        <button className="btn-primary" onClick={onGenerate} disabled={generating} title="AI phân tích ngữ cảnh dự án để sinh chiến lược tùy chỉnh">
-          {generating ? 'Đang sinh...' : '🤖 Sinh bằng AI'}
-        </button>
+      <div className="modal-actions flex items-center justify-end gap-2 border-t border-zinc-800 pt-4 mt-5">
+        {onBack && <Button variant="ghost" size="sm" onClick={onBack} disabled={generating}>Quay lại</Button>}
+        <Button variant="outline" size="sm" onClick={onGenerateCode} disabled={generating} title="Lấy cấu hình chuẩn theo template — tức thời, không tốn token">
+          <Zap className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+          Sinh bằng Code
+        </Button>
+        <Button variant="default" size="sm" onClick={onGenerate} disabled={generating} title="AI phân tích ngữ cảnh dự án để sinh chiến lược tùy chỉnh">
+          {generating ? 'Đang sinh...' : <><Bot className="w-3.5 h-3.5 mr-1.5" />Sinh bằng AI</>}
+        </Button>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -270,322 +270,336 @@ function ReviewView({ draft, stages, template, toggleStage, saving, onApprove, o
   const tpl = getTemplate(template);
   const enabledCount = stages.filter(s => s.enabled).length;
   return (
-    <>
+    <div className="space-y-4">
       {draft?.summary && (
-        <p className="pf-hint" style={{ marginTop: 0 }}><strong>Tóm tắt:</strong> {draft.summary}</p>
+        <div className="text-xs text-zinc-350 leading-relaxed bg-zinc-950 border border-zinc-800 p-4 rounded-lg shadow-sm">
+          <span className="text-[9px] font-bold uppercase text-zinc-500 tracking-wider block mb-1">Tóm tắt chiến dịch</span>
+          {draft.summary}
+        </div>
       )}
-      <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
-        Template: <strong>{tpl?.label || template}</strong> · Bật {enabledCount}/{stages.length} stage · Bấm để bật/tắt từng stage.
+      <div className="text-xs text-zinc-400 font-bold uppercase tracking-wider">
+        Template: <strong className="text-slate-200">{tpl?.label || template}</strong> · Bật {enabledCount}/{stages.length} stage · Bấm để bật/tắt từng stage.
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="flex flex-col gap-3">
         {stages.map((s, i) => (
           <StageRow key={s.key} stage={s} index={i + 1} onToggle={() => toggleStage(s.key)} editable />
         ))}
       </div>
       <ExecutionPlan plan={draft?.executionPlan} />
       {draft?.releaseGate && (
-        <div className="pf-field" style={{ marginTop: 12 }}>
-          <label className="pf-label">🚦 Release gate</label>
-          <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', opacity: 0.85 }}>{draft.releaseGate}</div>
-        </div>
+        <Card className="p-4">
+          <label className="text-xs font-bold uppercase text-zinc-400 block mb-2">🚦 Release gate</label>
+          <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{draft.releaseGate}</div>
+        </Card>
       )}
-      <div className="modal-actions">
-        <button className="btn-secondary" onClick={onRegenerate} disabled={saving}>Sinh lại</button>
-        <button className="btn-primary" onClick={onApprove} disabled={saving || enabledCount === 0}>
+      <div className="flex items-center justify-end gap-2 border-t border-zinc-800 pt-4">
+        <Button variant="ghost" size="sm" onClick={onRegenerate} disabled={saving}>Sinh lại</Button>
+        <Button variant="default" size="sm" onClick={onApprove} disabled={saving || enabledCount === 0}>
           {saving ? 'Đang lưu...' : 'Approve strategy'}
-        </button>
+        </Button>
       </div>
-    </>
+    </div>
   );
 }
 
 function CurrentView({ strategy, onRegenerate, onSaveToggles, onGoRelease }) {
   const [editing, setEditing] = useState(false);
-  const [localStages, setLocalStages] = useState(strategy.stages || []);
-  const [saving, setSaving] = useState(false);
+  const [localStages, setLocalStages] = useState([]);
 
-  // Đổi project (hoặc lưu xong) → đồng bộ lại local, thoát chế độ edit.
-  useEffect(() => { setLocalStages(strategy.stages || []); setEditing(false); }, [strategy]);
+  useEffect(() => {
+    if (strategy?.stages) setLocalStages(strategy.stages);
+  }, [strategy]);
 
+  const enabled = localStages.filter(s => s.enabled);
+  const disabled = localStages.filter(s => !s.enabled);
   const isApproved = strategy.status === 'approved';
-  const enabled = (strategy.stages || []).filter(s => s.enabled);
-  const disabled = (strategy.stages || []).filter(s => !s.enabled);
 
   function toggleLocal(key) {
     setLocalStages(prev => prev.map(s => (s.key === key ? { ...s, enabled: !s.enabled } : s)));
   }
-  async function save() {
-    setSaving(true);
-    await onSaveToggles?.(localStages);
-    setSaving(false);
+
+  async function handleSave() {
+    setEditing(false);
+    await onSaveToggles(localStages);
   }
 
   return (
-    <>
-      <div style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 10,
-        padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-        border: '1px solid #2ecc71', color: '#2ecc71', background: 'rgba(46,204,113,0.08)',
-      }}>
-        {isApproved ? '✅ Đã approve' : '✅ Đã cấu hình'}
-        {isApproved && strategy.approvedAt ? ` · ${new Date(strategy.approvedAt).toLocaleString('vi-VN')}` : ''}
-      </div>
-      {strategy.summary && (
-        <p className="pf-hint" style={{ marginTop: 0 }}><strong>Tóm tắt:</strong> {strategy.summary}</p>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <label className="pf-label" style={{ margin: 0 }}>
-          {editing ? 'Bật/tắt stage rồi bấm Lưu' : `Các stage đang bật (${enabled.length})`}
-        </label>
-        {!editing && (
-          <button className="btn-secondary" style={{ padding: '2px 10px', fontSize: 11 }} onClick={() => setEditing(true)}>
-            ✎ Chỉnh stage
-          </button>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/5 flex items-center gap-1 text-[10px]">
+          <Check className="w-3.5 h-3.5" />
+          <span>{isApproved ? 'Đã approve' : 'Đã cấu hình'}</span>
+        </Badge>
+        {isApproved && strategy.approvedAt && (
+          <span className="text-[10px] text-zinc-500 font-mono">
+            {new Date(strategy.approvedAt).toLocaleString('vi-VN')}
+          </span>
         )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {strategy.summary && (
+        <div className="text-xs text-zinc-350 leading-relaxed bg-zinc-950 border border-zinc-800 p-4 rounded-lg relative overflow-hidden shadow-sm">
+          <span className="text-[9px] font-bold uppercase text-zinc-500 tracking-wider block mb-1">Tóm tắt chiến dịch</span>
+          {strategy.summary}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-2">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+          {editing ? 'Bật/tắt stage rồi bấm Lưu' : `Các stage đang bật (${enabled.length})`}
+        </h4>
+        {!editing && (
+          <Button variant="outline" size="sm" className="h-8 text-xs border-zinc-800 hover:bg-zinc-800" onClick={() => setEditing(true)}>
+            <Edit2 className="w-3 h-3 mr-1.5" /> Chỉnh stage
+          </Button>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3">
         {editing
           ? localStages.map((s, i) => (
               <StageRow key={s.key} stage={s} index={i + 1} onToggle={() => toggleLocal(s.key)} editable />
             ))
           : enabled.map((s, i) => <StageRow key={s.key} stage={s} index={i + 1} />)}
-        {!editing && enabled.length === 0 && <div className="pf-hint">Chưa có stage nào được bật.</div>}
+        {!editing && enabled.length === 0 && <div className="text-xs text-zinc-500 italic">Chưa có stage nào được bật.</div>}
       </div>
 
       {!editing && disabled.length > 0 && (
-        <div style={{ marginTop: 10, fontSize: 11.5, opacity: 0.55 }}>
+        <div className="text-[10px] text-zinc-500 pl-1">
           Stage tắt: {disabled.map(s => s.activity).join(', ')}
         </div>
       )}
 
-      <ExecutionPlan plan={strategy.executionPlan} />
-      {strategy.releaseGate && (
-        <div className="pf-field" style={{ marginTop: 12 }}>
-          <label className="pf-label">🚦 Release gate</label>
-          <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', opacity: 0.85 }}>{strategy.releaseGate}</div>
+      {editing ? (
+        <div className="flex items-center justify-end gap-2 border-t border-zinc-800 pt-4">
+          <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setLocalStages(strategy.stages); }}>Hủy</Button>
+          <Button variant="default" size="sm" onClick={handleSave}>Lưu thay đổi</Button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between border-t border-zinc-800 pt-4 mt-4">
+          <Button variant="outline" size="sm" className="border-zinc-800 hover:bg-zinc-850" onClick={onRegenerate}>
+            <RefreshCw className="w-3.5 h-3.5 mr-1" /> Làm mới / AI Sinh lại
+          </Button>
+          {strategy.status === 'configured' && (
+            <Button variant="default" size="sm" onClick={onGoRelease}>
+              Kiểm tra Release Gate →
+            </Button>
+          )}
         </div>
       )}
-
-      {!editing && (
-        <div style={{
-          marginTop: 14, padding: '8px 12px', borderRadius: 6, fontSize: 11.5,
-          background: 'rgba(255,255,255,0.04)', border: '1px dashed var(--border-color, #444)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-        }}>
-          <span style={{ opacity: 0.8 }}>📊 Tiến độ % pass mỗi stage và Go/No-go release ở tab <strong>Release Check</strong>.</span>
-          <button className="btn-secondary" style={{ padding: '2px 10px', fontSize: 11, whiteSpace: 'nowrap' }} onClick={onGoRelease}>
-            Mở Release Check →
-          </button>
-        </div>
-      )}
-
-      <div className="modal-actions">
-        {editing ? (
-          <>
-            <button className="btn-secondary" onClick={() => { setEditing(false); setLocalStages(strategy.stages || []); }} disabled={saving}>
-              Hủy
-            </button>
-            <button className="btn-primary" onClick={save} disabled={saving}>
-              {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
-            </button>
-          </>
-        ) : (
-          <button className="btn-primary" onClick={onRegenerate}>Tạo lại bằng AI</button>
-        )}
-      </div>
-    </>
+    </div>
   );
 }
 
 function StageRow({ stage, index, onToggle, editable }) {
-  const on = stage.enabled;
   return (
-    <div style={{
-      border: `1px solid ${on ? 'var(--accent-color, #f0a000)' : 'var(--border-color, #444)'}`,
-      borderRadius: 8, padding: '10px 12px',
-      background: on ? 'rgba(240,160,0,0.06)' : 'rgba(255,255,255,0.02)',
-      opacity: on ? 1 : 0.6,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ fontWeight: 600, fontSize: 13 }}>
-          Stage {index}: {stage.activity}
-          {stage.stageType && (
-            <span style={{
-              marginLeft: 8, fontSize: 10, fontWeight: 500, padding: '1px 7px', borderRadius: 10,
-              background: 'rgba(255,255,255,0.08)', opacity: 0.8,
-            }}>
+    <Card 
+      className={`transition-all hover:bg-zinc-900/35 cursor-pointer ${stage.enabled ? 'opacity-100' : 'opacity-55 bg-zinc-950/20'}`}
+      onClick={editable ? onToggle : undefined}
+    >
+      <div className="p-4 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-zinc-500 font-mono">#{index}</span>
+            <span className="text-sm font-semibold text-slate-100">{stage.activity}</span>
+            <Badge variant="outline" className="text-[9px] uppercase px-1.5 py-0.2">
               {stageTypeLabel(stage.stageType)}
-            </span>
+            </Badge>
+          </div>
+          {editable && (
+            <Badge variant={stage.enabled ? 'default' : 'secondary'} className="text-[9px] font-bold px-2 py-0.5">
+              {stage.enabled ? 'ON' : 'OFF'}
+            </Badge>
           )}
         </div>
-        {editable ? (
-          <button
-            type="button"
-            onClick={onToggle}
-            style={{
-              minWidth: 54, padding: '3px 10px', borderRadius: 14, cursor: 'pointer', fontSize: 11, fontWeight: 700,
-              border: 'none', color: on ? '#0b0b0b' : '#fff',
-              background: on ? '#2ecc71' : 'var(--panel-bg-alt, #444)',
-            }}
-          >
-            {on ? 'ON' : 'OFF'}
-          </button>
-        ) : (
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#2ecc71' }}>ON</span>
+        {stage.trigger && (
+          <div className="text-[11px] text-zinc-400">
+            <span className="text-zinc-500 font-medium">Trigger:</span> {stage.trigger}
+          </div>
+        )}
+        {stage.enabled && (stage.entryCriteria || stage.exitCriteria) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-zinc-800 text-[11px] text-zinc-300">
+            <div className="bg-zinc-905/30 p-2.5 rounded border border-zinc-800/40">
+              <span className="text-zinc-500 font-bold block mb-1 text-[9px] uppercase tracking-wider">Entry Criteria</span>
+              <span className="leading-relaxed text-zinc-300">{stage.entryCriteria || '—'}</span>
+            </div>
+            <div className="bg-zinc-905/30 p-2.5 rounded border border-zinc-800/40">
+              <span className="text-zinc-500 font-bold block mb-1 text-[9px] uppercase tracking-wider">Exit Criteria</span>
+              <span className="leading-relaxed text-zinc-300">{stage.exitCriteria || '—'}</span>
+            </div>
+          </div>
         )}
       </div>
-      {(stage.trigger || stage.entryCriteria || stage.exitCriteria || (stage.skills && stage.skills.length > 0)) && (
-        <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.5, opacity: 0.82 }}>
-          {stage.trigger && <div>⏱ <strong>Khi nào:</strong> {stage.trigger}</div>}
-          {stage.entryCriteria && <div>▶ <strong>Vào:</strong> {stage.entryCriteria}</div>}
-          {stage.exitCriteria && <div>⏹ <strong>Ra:</strong> {stage.exitCriteria}</div>}
-          {stage.skills && stage.skills.length > 0 && <div>🧩 <strong>Skill:</strong> {stage.skills.join(', ')}</div>}
-        </div>
-      )}
-    </div>
+    </Card>
   );
 }
 
 function ExecutionPlan({ plan }) {
   if (!plan) return null;
-  const sprintMap = Array.isArray(plan.sprintMap) ? plan.sprintMap : [];
-  const ownerMap = Array.isArray(plan.ownerMap) ? plan.ownerMap : [];
-  const priorityOrder = Array.isArray(plan.priorityOrder) ? plan.priorityOrder : [];
-  if (!sprintMap.length && !ownerMap.length && !priorityOrder.length) return null;
+  const showSprints = plan.sprintMap?.length > 0;
+  const showOwners = plan.ownerMap?.length > 0;
+  const showOrders = plan.priorityOrder?.length > 0;
+  if (!showSprints && !showOwners && !showOrders) return null;
+
   return (
-    <div className="pf-field" style={{ marginTop: 12 }}>
-      <label className="pf-label">📋 Execution plan</label>
-      {priorityOrder.length > 0 && (
-        <div style={{ fontSize: 12, marginBottom: 6 }}>
-          <strong>Thứ tự ưu tiên:</strong> {priorityOrder.join(' → ')}
+    <Card className="p-4 space-y-3">
+      <label className="text-xs font-semibold text-zinc-350 block flex items-center gap-1.5">
+        <Calendar className="w-4 h-4 text-indigo-400" /> Kế hoạch thực hiện (Execution Plan)
+      </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        {showSprints && (
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-zinc-500 uppercase">Tiến trình (Sprint)</span>
+            <div className="space-y-1">
+              {plan.sprintMap.map((m, i) => (
+                <div key={i} className="flex justify-between p-1.5 rounded bg-zinc-950 border border-zinc-800">
+                  <span className="text-zinc-300 font-medium">{activityLabel(m.stage)}</span>
+                  <span className="text-indigo-450 font-semibold">{m.when}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {showOwners && (
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-zinc-500 uppercase">Chủ trì (Owner)</span>
+            <div className="space-y-1">
+              {plan.ownerMap.map((m, i) => (
+                <div key={i} className="flex justify-between p-1.5 rounded bg-zinc-950 border border-zinc-800">
+                  <span className="text-zinc-300 font-medium">{activityLabel(m.stage)}</span>
+                  <span className="text-zinc-400">{m.owner}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      {showOrders && (
+        <div className="space-y-1 pt-2 border-t border-zinc-850">
+          <span className="text-[10px] font-bold text-zinc-500 uppercase block">Thứ tự ưu tiên</span>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {plan.priorityOrder.map((stageKey, i) => (
+              <span key={stageKey} className="text-[10px] bg-zinc-900 text-zinc-300 font-semibold px-2 py-0.5 rounded border border-zinc-800">
+                {i + 1}. {activityLabel(stageKey)}
+              </span>
+            ))}
+          </div>
         </div>
       )}
-      {(sprintMap.length > 0 || ownerMap.length > 0) && (
-        <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {sprintMap.map((m, i) => (
-            <div key={`sp-${i}`}>🗓 <strong>{m.stage}:</strong> {m.when}</div>
-          ))}
-          {ownerMap.map((m, i) => (
-            <div key={`ow-${i}`}>👤 <strong>{m.stage}:</strong> {m.owner}</div>
-          ))}
-        </div>
-      )}
-    </div>
+    </Card>
   );
 }
-
-// Tab Release Check — tiến độ test theo stage (từ test_cases.stage + status) + Go/No-go.
-const GO_BADGE = {
-  go: { text: '✅ GO — đủ điều kiện release', color: '#2ecc71' },
-  'no-go': { text: '⛔ NO-GO — chưa đủ điều kiện', color: '#e74c3c' },
-  pending: { text: '⏳ Chưa đủ dữ liệu', color: '#c9a227' },
-};
 
 function ReleaseCheckView({ projectId }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
 
-  function load() {
-    if (!projectId) return;
-    setLoading(true); setErr('');
+  const fetchCheck = () => {
+    setLoading(true);
     fetchReleaseCheckApi(projectId)
-      .then(d => { setData(d); setLoading(false); })
-      .catch(e => { setErr(e.message); setLoading(false); });
-  }
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    let alive = true;
-    if (!projectId) { setLoading(false); return; }
-    setLoading(true); setErr('');
-    fetchReleaseCheckApi(projectId)
-      .then(d => { if (alive) { setData(d); setLoading(false); } })
-      .catch(e => { if (alive) { setErr(e.message); setLoading(false); } });
-    return () => { alive = false; };
+    if (projectId) fetchCheck();
   }, [projectId]);
 
-  if (loading) return <p className="pf-hint" style={{ padding: '8px 2px' }}>Đang tính tiến độ release...</p>;
-  if (err) return <p className="pf-hint" style={{ padding: '8px 2px', color: '#e74c3c' }}>Lỗi tải release check: {err}</p>;
-  if (!data) return null;
+  if (loading) return <p className="text-xs text-zinc-500 italic">Đang tải kết quả release check...</p>;
+  if (!data) return <p className="text-xs text-zinc-500 italic">Dự án chưa được approve test plan hoặc không có dữ liệu test.</p>;
 
-  const badge = GO_BADGE[data.goNoGo] || GO_BADGE.pending;
+  const hasCases = data.totalCases > 0;
+  const isBlock = data.blockers?.length > 0;
+  const goColor = data.decision === 'Go' ? 'text-emerald-450 bg-emerald-500/10 border-emerald-500/20' : data.decision === 'No-go' ? 'text-red-450 bg-red-500/10 border-red-500/20' : 'text-zinc-400 bg-zinc-900 border-zinc-800';
 
   return (
-    <div style={{ padding: '4px 2px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', padding: '5px 12px', borderRadius: 20,
-          fontSize: 12.5, fontWeight: 700, border: `1px solid ${badge.color}`, color: badge.color,
-          background: `${badge.color}14`,
-        }}>
-          {badge.text}
-        </span>
-        <button className="btn-secondary" style={{ padding: '3px 10px', fontSize: 11 }} onClick={load}>↻ Làm mới</button>
-      </div>
-
-      {!data.planConfigured && (
-        <p className="pf-hint" style={{ marginTop: 0 }}>
-          Chưa có test plan cấu hình — đang thống kê theo các stage xuất hiện trong test case.
-        </p>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {data.stages.map(s => <StageProgress key={s.key} stage={s} />)}
-        {data.stages.length === 0 && <div className="pf-hint">Chưa có test case nào để tính tiến độ.</div>}
-      </div>
-
-      {data.unassignedCount > 0 && (
-        <div style={{ marginTop: 10, fontSize: 11.5, opacity: 0.6 }}>
-          ⚠ {data.unassignedCount} test case chưa gán stage (không tính vào tiến độ).
+    <div className="space-y-4">
+      <div className="flex items-center justify-between border border-zinc-800 bg-zinc-950 p-4 rounded-xl shadow-sm">
+        <div>
+          <h3 className="text-sm font-bold text-slate-50 mb-0.5">🚦 Trạng thái: {data.decision}</h3>
+          <p className="text-[10px] text-zinc-500 font-medium">Release Gate: Pass 100% smoke + 0 blocker bug</p>
         </div>
+        <div className={`px-4 py-1.5 rounded-lg border text-xs font-bold uppercase tracking-wider ${goColor}`}>
+          {data.decision}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-4 bg-zinc-950 border-zinc-800 shadow-sm flex flex-col justify-between">
+          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Tổng Test Case</span>
+          <span className="text-2xl font-bold text-slate-50 mt-1">{data.totalCases}</span>
+        </Card>
+        <Card className="p-4 bg-zinc-950 border-zinc-800 shadow-sm flex flex-col justify-between">
+          <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-wider">Đã Pass</span>
+          <span className="text-2xl font-bold text-emerald-400 mt-1">{data.passedCount} ({data.passedPercent}%)</span>
+        </Card>
+        <Card className="p-4 bg-zinc-950 border-zinc-800 shadow-sm flex flex-col justify-between">
+          <span className="text-[9px] font-bold text-red-500 uppercase tracking-wider">Thất bại (Fail)</span>
+          <span className="text-2xl font-bold text-red-400 mt-1">{data.failedCount}</span>
+        </Card>
+        <Card className="p-4 bg-zinc-950 border-zinc-800 shadow-sm flex flex-col justify-between">
+          <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider">Blockers</span>
+          <span className="text-2xl font-bold text-amber-400 mt-1">{data.blockersCount}</span>
+        </Card>
+      </div>
+
+      {hasCases && (
+        <Card className="p-4">
+          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-3">Chi tiết theo Stage</span>
+          <div className="space-y-3.5">
+            {data.stages.map(s => {
+              const count = s.passedCount + s.failedCount + s.blockedCount;
+              const percent = count > 0 ? Math.round((s.passedCount / count) * 100) : 0;
+              return (
+                <div key={s.key} className="space-y-1 text-xs">
+                  <div className="flex justify-between font-medium text-zinc-300">
+                    <span>{s.activity}</span>
+                    <span className="font-mono text-zinc-400">{s.passedCount}/{count} Passed ({percent}%)</span>
+                  </div>
+                  <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-zinc-100 h-1.5 rounded-full" style={{ width: `${percent}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
       )}
 
-      {data.blockers.length > 0 && (
-        <div className="pf-field" style={{ marginTop: 14 }}>
-          <label className="pf-label">🚧 Blockers ({data.blockers.length})</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {data.blockers.slice(0, 30).map((b, i) => (
-              <div key={`${b.id}-${i}`} style={{ fontSize: 11.5, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{
-                  fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
-                  border: `1px solid ${b.reason === 'fail' ? '#e74c3c' : '#c9a227'}`,
-                  color: b.reason === 'fail' ? '#e74c3c' : '#c9a227',
-                }}>
-                  {b.reason === 'fail' ? 'FAIL' : 'BLOCK'}
-                </span>
-                <span style={{ opacity: 0.85 }}>[{activityLabel(b.stage)}] {b.name || b.id}</span>
-                {b.priority && <span style={{ opacity: 0.5 }}>· {b.priority}</span>}
-                {b.relatedBug && <span style={{ opacity: 0.5 }}>· 🐞 {b.relatedBug}</span>}
+      {isBlock ? (
+        <div className="border border-red-900/20 bg-red-900/10 p-4 rounded-xl space-y-2">
+          <div className="text-xs font-bold text-red-400 uppercase flex items-center gap-1.5">
+            <ShieldAlert className="w-4 h-4" /> Blockers phát hiện ({data.blockers.length})
+          </div>
+          <div className="space-y-1.5">
+            {data.blockers.map(tc => (
+              <div key={tc.id} className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs flex items-center justify-between">
+                <span className="font-bold text-amber-500">{tc.id}</span>
+                <span className="text-zinc-350 text-left flex-1 px-3 truncate">{tc.name}</span>
+                <Badge variant="destructive" className="text-[9px] font-bold uppercase">
+                  {tc.status}
+                </Badge>
               </div>
             ))}
-            {data.blockers.length > 30 && (
-              <div className="pf-hint" style={{ fontSize: 11 }}>...và {data.blockers.length - 30} blocker khác.</div>
-            )}
           </div>
         </div>
+      ) : (
+        <div className="flex items-center gap-2 border border-emerald-500/20 bg-emerald-500/5 p-3 rounded-lg text-xs text-emerald-450 font-medium">
+          <Check className="w-4 h-4 text-emerald-400" /> Không phát hiện blocker nào cản trở Release.
+        </div>
       )}
-    </div>
-  );
-}
 
-function StageProgress({ stage }) {
-  const pct = stage.percent;
-  const barColor = pct === 100 ? '#2ecc71' : (stage.failed > 0 || stage.blocked > 0 ? '#e74c3c' : '#f0a000');
-  return (
-    <div style={{ border: '1px solid var(--border-color, #444)', borderRadius: 8, padding: '8px 12px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-        <span>{activityLabel(stage.key)}</span>
-        <span style={{ opacity: 0.8 }}>{stage.passed}/{stage.total} pass ({pct}%)</span>
-      </div>
-      <div style={{ height: 6, borderRadius: 4, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: barColor, transition: 'width 0.2s' }} />
-      </div>
-      <div style={{ marginTop: 5, fontSize: 10.5, opacity: 0.65, display: 'flex', gap: 12 }}>
-        {stage.failed > 0 && <span style={{ color: '#e74c3c' }}>✗ {stage.failed} fail</span>}
-        {stage.blocked > 0 && <span style={{ color: '#c9a227' }}>▣ {stage.blocked} block</span>}
-        {stage.pending > 0 && <span>◌ {stage.pending} chưa chạy</span>}
-        {stage.total === 0 && <span>Chưa có test case</span>}
+      {data.unassignedCount > 0 && (
+        <div className="flex items-center gap-2 text-xs text-zinc-500 italic bg-zinc-900/10 p-2.5 rounded-lg border border-zinc-800">
+          <AlertCircle className="w-3.5 h-3.5" /> Có {data.unassignedCount} test case chưa được gán stage và không tính vào Gate.
+        </div>
+      )}
+
+      <div className="flex justify-end border-t border-zinc-800 pt-4">
+        <Button variant="outline" size="sm" onClick={fetchCheck}>
+          <RefreshCw className="w-3.5 h-3.5 mr-1" /> Làm mới Release Gate
+        </Button>
       </div>
     </div>
   );
