@@ -18,9 +18,7 @@
       "src/server/db/schema.sql",
       "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
     ],
-    "targets": [
-      "node20"
-    ]
+    "targets": ["node20"]
   },
   "keywords": [],
   "author": "",
