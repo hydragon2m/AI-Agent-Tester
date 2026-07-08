@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { fetchProviderSettingsApi, fetchProviderStatusApi, saveProviderSettingApi } from '../backend-api/providers.api';
 
-// Chỉ dùng Gemini — không hiển thị Claude/OpenAI trên UI Settings
+// Chỉ dùng Gemini và Codex trên UI Settings
 const DEFAULT_PROVIDER_FORM = {
   gemini: { key: '', enabled: true, priority: 1, hasKey: false },
+  codex: { key: '', enabled: true, priority: 2, hasKey: false, api_base: '', model_name: '' },
 };
 
 export function useProviderSettings(onToast) {
@@ -25,6 +26,8 @@ export function useProviderSettings(onToast) {
           enabled: row.enabled,
           priority: row.priority,
           hasKey: row.hasKey,
+          api_base: row.api_base || '',
+          model_name: row.model_name || '',
           key: '',
         };
       }
@@ -44,6 +47,8 @@ export function useProviderSettings(onToast) {
         key: value.key,
         enabled: value.enabled,
         priority: value.priority,
+        api_base: value.api_base,
+        model_name: value.model_name,
       });
     }
     await fetchProviderStatus();

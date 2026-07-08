@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ============================
    AI QA ASSISTANT — STYLE.CSS
    ============================ */
@@ -12,53 +16,39 @@
 }
 
 :root {
-  /* Soft Obsidian / Charcoal palette (2026-07-08) — Giảm tương phản gắt để chống lóa mắt */
-  --bg-dark: #0f1115;
-  /* Deep charcoal background (softer than #08080c) */
-  --bg-card: #16181f;
-  /* Soft card panels */
-  --bg-card2: #1c1f26;
-  /* Solid secondary cards */
-  --bg-input: #0f1115;
-  /* Matching inputs */
-  --border: rgba(255, 255, 255, 0.055);
-  /* Thin flat borders */
-  --border-focus: #5a5be2;
-  /* Subdued focus color */
-  --primary: #4f46e5;
-  /* Solid deep indigo */
-  --primary-light: #6366f1;
-  /* Indigo accent */
-  --primary-glow: rgba(79, 70, 229, 0.05);
-  /* Faint accent glow */
-  --purple: #a855f7;
-  --cyan: #06b6d4;
-  --green: #10b981;
-  --yellow: #f59e0b;
-  --red: #ef4444;
-  --text-primary: #e2e8f0;
-  /* Softer off-white (reduces visual fatigue / halation) */
-  --text-secondary: #94a3b8;
-  /* Neutral slate gray (standard readability) */
-  --text-muted: #64748b;
-  /* Soft muted slate (readable, no longer pitch dark) */
-  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Bảng màu tối giản của shadcn/ui (Zinc theme) */
+  --bg-dark: #09090b;       /* Nền đen tối giản — app shell */
+  --bg-card: #0f0f11;       /* Nền card — nhẹ hơn nền một chút */
+  --bg-card2: #141417;      /* Nền card phụ / header bảng */
+  --bg-input: #0b0b0e;      /* Ô nhập liệu — tối hơn card nhẹ */
+  --border: #29292e;        /* Viền — vừa đủ, không chói */
+  --border-focus: #47474f;  /* Viền khi focus */
+  --primary: #fafafa;
+  --primary-light: #f4f4f5;
+  --primary-glow: rgba(250, 250, 250, 0.02);
+  --purple: #d8b4fe;
+  --cyan: #67e8f9;
+  --green: #4ade80;
+  --yellow: #fde047;
+  --red: #fca5a5;
+  --text-primary: #ededf0;  /* Chữ chính — bắt hơn trắng thuần để giảm chói */
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --radius: 8px;
-  /* bo góc nhỏ hơn → sắc nét, chuyên nghiệp */
   --radius-sm: 6px;
-  --radius-lg: 10px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  /* phẳng, dịu */
+  --radius-lg: 12px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255,255,255,0.025);
   --shadow-glow: none;
-  /* bỏ glow */
   --transition: all 0.15s ease;
-  --header-h: 64px;
+  --header-h: 0px;
 }
 
 html {
-  font-size: 16px; /* Tăng cỡ chữ cơ sở từ 14px lên 16px để chữ không bị nhỏ */
+  font-size: 16px; /* Đặt font-size cơ sở về 16px để các class rem của Tailwind tỷ lệ chuẩn và dễ đọc */
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -2078,7 +2068,7 @@ select:focus,
   color: var(--text-primary);
   font-size: 0.82rem;
   font-family: var(--font-sans);
-  line-height: 1.6;
+  line-height: 1.65;
   resize: vertical;
   min-height: 140px;
   transition: var(--transition);
@@ -2087,8 +2077,8 @@ select:focus,
 
 .pf-textarea:focus {
   outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .pf-textarea::placeholder {
@@ -2204,47 +2194,54 @@ select:focus,
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  padding: 4px 6px;
-  font-size: 14px;
+  padding: 3px 6px 3px 4px;
+  font-size: 12px;
   color: var(--text-secondary);
   border-radius: 4px;
   transition: background 0.12s ease, color 0.12s ease;
-  margin-bottom: 1px;
+  margin-bottom: 0;
   position: relative;
+  min-height: 26px;
 }
 
 .tree-node-content:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
 }
 
 .tree-node-content.active {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(99, 102, 241, 0.10);
   color: var(--primary-light);
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.tree-node-content.active .tree-node-icon {
+  opacity: 1;
 }
 
 .tree-node-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   overflow: hidden;
 }
 
+/* Toggle chevron */
 .tree-toggle-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  font-size: 8px;
+  width: 12px;
+  height: 12px;
+  font-size: 7px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: transform 0.2s, color 0.15s;
+  transition: color 0.15s;
   background: none;
   border: none;
   padding: 0;
+  flex-shrink: 0;
 }
 
 .tree-toggle-icon:hover {
@@ -2256,43 +2253,51 @@ select:focus,
   pointer-events: none;
 }
 
+/* Type badge icon: single uppercase letter in a coloured pill */
 .tree-node-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   font-size: 8px;
   font-weight: 800;
   border-radius: 3px;
   flex-shrink: 0;
-  margin-right: 4px;
+  margin-right: 2px;
+  opacity: 0.85;
 }
 
 .icon-project {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.25);
 }
 
 .icon-module {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .icon-screen {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 .icon-feature {
-  background: rgba(139, 92, 246, 0.1);
-  color: #a855f7;
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.2);
 }
 
 .tree-node-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .tree-node-actions {
@@ -2303,6 +2308,22 @@ select:focus,
 
 .tree-node-content:hover .tree-node-actions {
   opacity: 1;
+}
+
+/* Indent guide: thin vertical line for nested levels */
+.tree-children {
+  position: relative;
+}
+
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 0;
+  bottom: 4px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  pointer-events: none;
 }
 
 .tree-more-btn {
@@ -2342,17 +2363,16 @@ select:focus,
 .web-workspace {
   flex: 1;
   min-width: 0;
-  padding: 24px;
+  padding: 20px 24px 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
 
-.workspace-header,
 .panel {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   background: var(--bg-card);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow);
   border-radius: var(--radius);
 }
 
@@ -2361,8 +2381,8 @@ select:focus,
   justify-content: space-between;
   gap: 20px;
   align-items: flex-start;
-  padding: 20px;
-  border-radius: var(--radius-sm);
+  padding: 0 0 16px 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .workspace-header h1 {
@@ -2394,7 +2414,7 @@ select:focus,
 
 .panel {
   border-radius: var(--radius-sm);
-  padding: 16px;
+  padding: 20px;
   min-width: 0;
 }
 
@@ -2420,7 +2440,7 @@ select:focus,
 .requirement-input,
 .raw-output {
   width: 100%;
-  min-height: 260px;
+  min-height: 140px;
   resize: vertical;
 }
 
@@ -2571,6 +2591,7 @@ select:focus,
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+  min-height: 32px;
   margin-bottom: 12px;
 }
 
@@ -2897,15 +2918,17 @@ select:focus,
 
 .tree-node-menu {
   position: relative;
-  opacity: 0.25;
-  transition: opacity 0.15s;
   flex-shrink: 0;
 }
 
-.tree-node-content:hover .tree-node-menu,
-.tree-node-content.active .tree-node-menu,
-.tree-node-menu.open,
-.tree-node-menu:focus-within {
+.tree-node-menu button {
+  opacity: 0.25;
+  transition: opacity 0.15s;
+}
+
+.tree-node-content:hover .tree-node-menu button,
+.tree-node-content.active .tree-node-menu button,
+.tree-node-menu:focus-within button {
   opacity: 1;
 }
 
@@ -2927,6 +2950,7 @@ select:focus,
 
 .project-sidebar.collapsed .project-sidebar-title,
 .project-sidebar.collapsed .btn-new-project,
+.project-sidebar.collapsed .project-list,
 .project-sidebar.collapsed .project-sidebar-footer,
 .project-sidebar.collapsed .tree-node-name,
 .project-sidebar.collapsed .tree-node-menu,
@@ -3050,13 +3074,18 @@ body.sidebar-resizing * {
    ===================================================== */
 
 .step-badge {
-  display: inline-block;
-  font-size: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--primary-light);
-  margin-bottom: 4px;
+  color: #9da8c7;
+  background: rgba(99, 102, 241, 0.07);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 4px;
+  padding: 2px 7px;
+  margin-bottom: 6px;
 }
 
 .output-sections {

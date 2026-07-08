@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { pushScopeToLarkApi } from '../../backend-api/lark.api';
+import { Button } from '../ui/Button';
+import { X, Share2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const SCOPE_LABELS = { system: 'Hệ thống', project: 'Project', module: 'Module', screen: 'Screen', feature: 'Feature' };
 
@@ -38,24 +40,28 @@ export function ExportLarkModal({ scope, onClose, onToast }) {
   }
 
   return (
-    <div className="modal-overlay" style={{ display: 'flex' }}>
-      <div className="modal modal-wide">
-        <div className="modal-header">
-          <h2>Export to Lark Base</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
+    <div className="modal-overlay flex items-center justify-center fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm p-4">
+      <div className="modal modal-wide w-full max-w-2xl bg-slate-900 border border-border rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="modal-header flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">Export to Lark Base</h2>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-slate-400 hover:text-white rounded-md">
+            <X className="w-4 h-4" />
+          </Button>
         </div>
-        <div className="modal-body">
-          <p className="pf-hint" style={{ marginTop: 0 }}>
-            Phạm vi: <strong>{SCOPE_LABELS[scope?.scopeType] || 'Scope'} · {scope?.name || ''}</strong>.{' '}
-            {isSystem
-              ? 'Mỗi project sẽ được đẩy vào MỘT bảng riêng (tên bảng = tên project) trong cùng Base.'
-              : 'Toàn bộ test case gộp vào 1 bảng (tên bảng = tên project).'}
-          </p>
+        <div className="modal-body p-5 space-y-4">
+          <div className="text-xs text-slate-400 leading-normal space-y-1">
+            <div>Phạm vi: <strong className="text-slate-200">{SCOPE_LABELS[scope?.scopeType] || 'Scope'} · {scope?.name || ''}</strong></div>
+            <div className="text-indigo-400">
+              {isSystem
+                ? 'Mỗi project sẽ được đẩy vào MỘT bảng riêng (tên bảng = tên project) trong cùng Base.'
+                : 'Toàn bộ test case gộp vào 1 bảng (tên bảng = tên project).'}
+            </div>
+          </div>
 
-          <div className="pf-field">
-            <label className="pf-label">Link Lark Base (hoặc Wiki chứa Base)</label>
+          <div className="pf-field flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-slate-350">Link Lark Base (hoặc Wiki chứa Base)</label>
             <input
-              className="pf-input"
+              className="w-full h-9 px-3 rounded-md border border-border bg-slate-950 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               value={url}
               onChange={e => setUrl(e.target.value)}
               placeholder="https://xxx.larksuite.com/base/xxx hoặc .../wiki/xxx"
@@ -64,51 +70,59 @@ export function ExportLarkModal({ scope, onClose, onToast }) {
             />
           </div>
 
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 13 }}>
-            <input type="checkbox" checked={saveLink} onChange={e => setSaveLink(e.target.checked)} disabled={pushing} />
+          <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={saveLink} 
+              onChange={e => setSaveLink(e.target.checked)} 
+              disabled={pushing}
+              className="border-border bg-slate-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4 rounded"
+            />
             Tự động lưu liên kết Lark vào từng project (để lần sau "Đẩy lên Lark" ở node dùng lại)
           </label>
 
-          <p className="pf-hint">
+          <p className="text-[10px] text-slate-500 leading-normal">
             Bảng/field còn thiếu sẽ được tự tạo; bảng đã có chỉ được thêm field thiếu — không sửa/xoá dữ liệu sẵn có.
           </p>
 
           {error && (
-            <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid #ef4444', color: '#fca5a5', padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 10 }}>
-              {error}
+            <div className="flex items-center gap-2 border border-red-500/20 bg-red-500/5 p-3 rounded-md text-xs text-red-400">
+              <AlertTriangle className="w-4 h-4" />
+              <span>{error}</span>
             </div>
           )}
 
           {result && (
-            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', padding: '10px 12px', borderRadius: 8, marginBottom: 10, fontSize: 13 }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>
+            <div className="border border-border bg-slate-950/40 p-4 rounded-md space-y-3 text-xs">
+              <div className="font-bold text-slate-200 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 Kết quả: tạo {result.totals?.created || 0} · cập nhật {result.totals?.updated || 0} · liên kết {result.totals?.bugsLinked || 0} bug
               </div>
-              <div style={{ maxHeight: 180, overflow: 'auto' }}>
+              <div className="max-h-[160px] overflow-y-auto space-y-1.5 text-slate-350 pr-2">
                 {(result.tables || []).map((tbl, i) => (
-                  <div key={i} style={{ padding: '3px 0', borderTop: i ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                    <strong>{tbl.projectName}</strong>
+                  <div key={i} className="py-1 border-t border-border/30 first:border-0">
+                    <strong className="text-slate-300">{tbl.projectName}</strong>
                     {tbl.error
-                      ? <span style={{ color: '#fca5a5' }}> — lỗi: {tbl.error}</span>
+                      ? <span className="text-red-400"> — lỗi: {tbl.error}</span>
                       : tbl.skipped
-                        ? <span style={{ opacity: 0.6 }}> — {tbl.note || 'bỏ qua'}</span>
-                        : <span style={{ opacity: 0.85 }}> → bảng “{tbl.tableName}”: tạo {tbl.created}, cập nhật {tbl.updated}{tbl.createdTable ? ' (bảng mới)' : ''}</span>}
+                        ? <span className="text-slate-500"> — {tbl.note || 'bỏ qua'}</span>
+                        : <span className="text-slate-400"> → bảng “{tbl.tableName}”: tạo {tbl.created}, cập nhật {tbl.updated}{tbl.createdTable ? ' (bảng mới)' : ''}</span>}
                   </div>
                 ))}
               </div>
               {result.errors?.length > 0 && (
-                <div style={{ color: '#fca5a5', marginTop: 6 }}>
+                <div className="text-red-400 font-semibold border-t border-border/30 pt-2 mt-2">
                   {result.errors.length} lỗi: {result.errors.slice(0, 3).join('; ')}{result.errors.length > 3 ? '…' : ''}
                 </div>
               )}
             </div>
           )}
 
-          <div className="modal-actions">
-            <button className="btn-secondary" onClick={onClose} disabled={pushing}>{result ? 'Đóng' : 'Huỷ'}</button>
-            <button className="btn-primary" onClick={handlePush} disabled={!url.trim() || pushing}>
+          <div className="modal-actions flex items-center justify-end gap-2 border-t border-border pt-4 mt-5">
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={pushing}>{result ? 'Đóng' : 'Huỷ'}</Button>
+            <Button variant="default" size="sm" onClick={handlePush} disabled={!url.trim() || pushing}>
               {pushing ? 'Đang đẩy lên Lark...' : result ? 'Đẩy lại' : 'Đẩy lên Lark'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

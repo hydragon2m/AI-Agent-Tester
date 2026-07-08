@@ -9,12 +9,14 @@ async function getProviderSettings() {
     enabled: !!r.enabled,
     priority: r.priority,
     hasKey: !!r.encrypted_key && r.encrypted_key.length > 0,
+    api_base: r.api_base || '',
+    model_name: r.model_name || '',
     created_at: r.created_at,
     updated_at: r.updated_at
   }));
 }
 
-async function saveProviderSetting(provider, rawKey, enabled, priority) {
+async function saveProviderSetting(provider, rawKey, enabled, priority, api_base = '', model_name = '') {
   const existing = await dbGet('SELECT * FROM provider_settings WHERE provider = ?', [provider]);
   const nowStr = new Date().toISOString();
   
@@ -29,16 +31,16 @@ async function saveProviderSetting(provider, rawKey, enabled, priority) {
   if (existing) {
     await dbRun(
       `UPDATE provider_settings 
-       SET encrypted_key = ?, enabled = ?, priority = ?, updated_at = ? 
+       SET encrypted_key = ?, enabled = ?, priority = ?, api_base = ?, model_name = ?, updated_at = ? 
        WHERE provider = ?`,
-      [encryptedKey, enabledVal, prioVal, nowStr, provider]
+      [encryptedKey, enabledVal, prioVal, api_base, model_name, nowStr, provider]
     );
   } else {
     const id = 'prov_' + Date.now().toString() + '_' + provider;
     await dbRun(
-      `INSERT INTO provider_settings (id, provider, encrypted_key, enabled, priority, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, provider, encryptedKey, enabledVal, prioVal, nowStr]
+      `INSERT INTO provider_settings (id, provider, encrypted_key, enabled, priority, api_base, model_name, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, provider, encryptedKey, enabledVal, prioVal, api_base, model_name, nowStr]
     );
   }
 
@@ -53,8 +55,22 @@ async function getActiveKey(provider) {
   return '';
 }
 
+async function getProviderDetails(provider) {
+  const row = await dbGet('SELECT * FROM provider_settings WHERE provider = ?', [provider]);
+  if (row) {
+    return {
+      key: row.encrypted_key ? decrypt(row.encrypted_key) : '',
+      enabled: !!row.enabled,
+      api_base: row.api_base || '',
+      model_name: row.model_name || ''
+    };
+  }
+  return null;
+}
+
 module.exports = {
   getProviderSettings,
   saveProviderSetting,
-  getActiveKey
+  getActiveKey,
+  getProviderDetails
 };

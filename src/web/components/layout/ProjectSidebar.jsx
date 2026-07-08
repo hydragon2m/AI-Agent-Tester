@@ -2,22 +2,32 @@ import { useState, useEffect, useCallback } from 'react';
 import { TreeNode } from '../tree/TreeNode';
 import { useResizableWidth } from '../../state/useResizableWidth';
 import { fetchSystems, createSystemApi, updateSystemApi, deleteSystemApi } from '../../backend-api/systems.api';
+import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu';
+import { Button } from '../ui/Button';
+import { SystemFormModal } from './SystemFormModal';
+import {
+  Plus, MoreVertical, FileSpreadsheet, Share2, Edit2, Trash2,
+  FolderPlus, FolderOpen, Folder, ChevronLeft, ChevronRight, Settings,
+} from 'lucide-react';
+import hydraLogo from '../../hydra-logo.png';
 
-// Sidebar phân cấp: System → Project → Module → Screen → Feature.
-// - Systems lấy từ /api/systems (state nội bộ sidebar, tự reload khi CRUD system).
-// - Project nhóm theo node.systemId; project không có system (hoặc system đã xóa) → nhóm "Chưa gán".
-// - Tạo project dưới 1 system: onCreateProject(systemId) nếu có (modal — Step 8), else fallback prompt onAdd.
-export function ProjectSidebar({ nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, onExport, onImport, onCreateProject, onExportFile, onExportLark }) {
+export function ProjectSidebar({
+  nodes, activeNodeId, onSelect, onAdd, onRename, onDelete,
+  onExport, onImport, onCreateProject, onExportFile, onExportLark,
+  demoMode, setDemoMode, onOpenSettings,
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const { width, resizing, startResize } = useResizableWidth({ storageKey: 'sidebar-width-project', defaultWidth: 220, min: 180, max: 460 });
   const [systems, setSystems] = useState([]);
 
+  // Modal state: null | { mode: 'create' } | { mode: 'edit', system: {...} }
+  const [modal, setModal] = useState(null);
+
   const reloadSystems = useCallback(() => {
-    fetchSystems().then(setSystems).catch(() => { /* backend cũ chưa có route → coi như không có system */ });
+    fetchSystems().then(setSystems).catch(() => {});
   }, []);
   useEffect(() => { reloadSystems(); }, [reloadSystems]);
 
-  // Nhóm project theo system. systemId null / trỏ tới system đã bị xóa → "Chưa gán".
   const projectNodes = nodes.filter(n => n.type === 'project');
   const knownSystemIds = new Set(systems.map(s => s.id));
   const projectsBySystem = {};
@@ -30,132 +40,259 @@ export function ProjectSidebar({ nodes, activeNodeId, onSelect, onAdd, onRename,
     }
   }
 
-  async function handleCreateSystem() {
-    const name = window.prompt('Tên hệ thống (System):');
-    if (!name?.trim()) return;
-    const description = window.prompt('Mô tả hệ thống (tùy chọn):', '') || '';
-    try { await createSystemApi({ name: name.trim(), description }); reloadSystems(); }
-    catch (e) { window.alert(`Tạo system thất bại: ${e.message}`); }
+  async function handleCreateSystem(payload) {
+    await createSystemApi(payload);
+    reloadSystems();
   }
-  async function handleRenameSystem(sys) {
-    const name = window.prompt('Tên hệ thống mới:', sys.name);
-    if (!name?.trim()) return;
-    try { await updateSystemApi(sys.id, { name: name.trim() }); reloadSystems(); }
-    catch (e) { window.alert(`Đổi tên system thất bại: ${e.message}`); }
+
+  async function handleRenameSystem(sys, payload) {
+    await updateSystemApi(sys.id, payload);
+    reloadSystems();
   }
+
   async function handleDeleteSystem(sys) {
-    if (!window.confirm(`Xóa hệ thống "${sys.name}"?\nCác project bên trong KHÔNG bị xóa — sẽ chuyển về nhóm "Chưa gán hệ thống".`)) return;
+    if (!window.confirm(`Xóa hệ thống "${sys.name}"?\nCác project bên trong KHÔNG bị xóa — sẽ chuyển về nhóm "Chưa gán".`)) return;
     try { await deleteSystemApi(sys.id); reloadSystems(); }
-    catch (e) { window.alert(`Xóa system thất bại: ${e.message}`); }
+    catch (e) { console.error('Xóa system thất bại:', e.message); }
   }
+
   function addProject(systemId, systemName) {
     if (onCreateProject) onCreateProject(systemId || null, systemName || null);
-    else onAdd(null, 'project', systemId || null); // fallback: prompt-based (nếu chưa mắc wizard)
+    else onAdd(null, 'project', systemId || null);
   }
 
   const treeProps = { nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, onExportFile, onExportLark };
 
   return (
-    <aside className={`project-sidebar ${collapsed ? 'collapsed' : ''} ${resizing ? 'resizing' : ''}`} style={collapsed ? undefined : { width }}>
-      <div className="project-sidebar-header">
-        <span className="project-sidebar-title">Systems</span>
-        <div className="project-sidebar-header-actions">
-          <button className="btn-new-project" onClick={handleCreateSystem} title="Tạo hệ thống (System)">+</button>
-          <button className="btn-toggle-sidebar" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>‹</button>
+    <>
+      <aside
+        className={`project-sidebar ${collapsed ? 'collapsed' : ''} ${resizing ? 'resizing' : ''}`}
+        style={collapsed ? undefined : { width }}
+      >
+        {/* Header — đồng bộ chiều cao 52px với workspace skills header */}
+        <div className="project-sidebar-header flex items-center justify-between h-[52px] px-3 border-b border-zinc-800">
+          {!collapsed && (
+            <button
+              className="flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/5 text-zinc-500 hover:text-white transition-colors"
+              onClick={() => setModal({ mode: 'create' })}
+              title="Tạo hệ thống mới"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <div className={`flex items-center gap-1.5 ${collapsed ? 'mx-auto' : 'ml-auto'}`}>
+            <button
+              className="flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/5 text-zinc-500 hover:text-white transition-colors"
+              onClick={() => setCollapsed(v => !v)}
+              title={collapsed ? 'Mở rộng' : 'Thu gọn'}
+            >
+              {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="project-list">
-        {systems.map(sys => (
-          <SystemGroup
-            key={sys.id}
-            system={sys}
-            projects={projectsBySystem[sys.id] || []}
-            treeProps={treeProps}
-            onAddProject={() => addProject(sys.id, sys.name)}
-            onRenameSystem={() => handleRenameSystem(sys)}
-            onDeleteSystem={() => handleDeleteSystem(sys)}
-            onExportSystemFile={onExportFile ? () => onExportFile({ id: sys.id, name: sys.name, type: 'system' }) : undefined}
-            onExportSystemLark={onExportLark ? () => onExportLark({ id: sys.id, name: sys.name, type: 'system' }) : undefined}
-          />
-        ))}
+        {/* System tree */}
+        <div className="project-list flex-1 overflow-y-auto">
+          {systems.map(sys => (
+            <SystemGroup
+              key={sys.id}
+              system={sys}
+              projects={projectsBySystem[sys.id] || []}
+              treeProps={treeProps}
+              onAddProject={() => addProject(sys.id, sys.name)}
+              onEditSystem={() => setModal({ mode: 'edit', system: sys })}
+              onDeleteSystem={() => handleDeleteSystem(sys)}
+              onExportSystemFile={onExportFile ? () => onExportFile({ id: sys.id, name: sys.name, type: 'system' }) : undefined}
+              onExportSystemLark={onExportLark ? () => onExportLark({ id: sys.id, name: sys.name, type: 'system' }) : undefined}
+            />
+          ))}
 
-        {(ungrouped.length > 0 || systems.length === 0) && (
-          <SystemGroup
-            system={{ id: null, name: systems.length === 0 ? 'Projects' : 'Chưa gán hệ thống' }}
-            projects={ungrouped}
-            treeProps={treeProps}
-            onAddProject={() => addProject(null)}
-          />
+          {(ungrouped.length > 0 || systems.length === 0) && (
+            <SystemGroup
+              system={{ id: null, name: systems.length === 0 ? 'Projects' : 'Chưa gán' }}
+              projects={ungrouped}
+              treeProps={treeProps}
+              onAddProject={() => addProject(null)}
+            />
+          )}
+
+          {systems.length === 0 && projectNodes.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setModal({ mode: 'create' })}
+              className="w-full text-[11px] text-zinc-600 hover:text-zinc-300 px-4 py-3 italic text-center transition-colors"
+            >
+              Bấm để tạo hệ thống đầu tiên...
+            </button>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="project-sidebar-footer flex flex-col gap-2 p-3 border-t border-zinc-800 bg-zinc-950/40">
+          {!collapsed ? (
+            <>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="flex-1 text-[11px] h-7 border-zinc-800 hover:bg-zinc-800 hover:text-white" onClick={onExport}>
+                  Export
+                </Button>
+                <label className="flex-1">
+                  <Button variant="outline" size="sm" className="w-full text-[11px] h-7 border-zinc-800 hover:bg-zinc-800 hover:text-white cursor-pointer" asChild>
+                    <span className="flex items-center justify-center">Import</span>
+                  </Button>
+                  <input type="file" accept=".json" className="hidden" onChange={onImport} />
+                </label>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-900">
+                <div className="flex items-center gap-2 px-1">
+                  <img src={hydraLogo} alt="Hydra Logo" className="h-6 w-auto block opacity-80" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] font-bold text-slate-200 truncate">AI QA Assistant</span>
+                    <span className="text-[9px] text-slate-400 font-mono">Hanhdth</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Button
+                    variant={demoMode ? 'default' : 'secondary'}
+                    size="sm"
+                    className="h-7 text-[10px] flex-1 py-0 px-2 font-semibold"
+                    onClick={() => setDemoMode(v => !v)}
+                  >
+                    Demo Mode
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7 border-zinc-800 hover:bg-zinc-800 hover:text-white shrink-0"
+                    onClick={onOpenSettings}
+                    title="Cấu hình nhà cung cấp AI"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-1">
+              <img src={hydraLogo} alt="Hydra Logo" className="h-6 w-auto block opacity-80" />
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 border-zinc-800 hover:bg-zinc-800 hover:text-white"
+                onClick={onOpenSettings}
+                title="Cấu hình nhà cung cấp AI"
+              >
+                <Settings className="w-3.5 h-3.5 text-zinc-400" />
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {!collapsed && (
+          <div className={`sidebar-resize-handle ${resizing ? 'resizing' : ''}`} onMouseDown={startResize} />
         )}
+      </aside>
 
-        {systems.length === 0 && projectNodes.length === 0 && (
-          <div className="empty-state">Chưa có gì. Bấm + để tạo System, hoặc tạo Project trong nhóm bên dưới.</div>
-        )}
-      </div>
-
-      <div className="project-sidebar-footer">
-        <button className="btn-export-projects" onClick={onExport}>Export</button>
-        <label className="btn-import-projects">
-          Import
-          <input type="file" accept=".json" style={{ display: 'none' }} onChange={onImport} />
-        </label>
-      </div>
-      {!collapsed && (
-        <div className={`sidebar-resize-handle ${resizing ? 'resizing' : ''}`} onMouseDown={startResize} />
+      {/* System Form Modal */}
+      {modal?.mode === 'create' && (
+        <SystemFormModal
+          mode="create"
+          onConfirm={handleCreateSystem}
+          onClose={() => setModal(null)}
+        />
       )}
-    </aside>
+      {modal?.mode === 'edit' && (
+        <SystemFormModal
+          mode="edit"
+          initialData={{ name: modal.system.name, description: modal.system.description || '' }}
+          onConfirm={(payload) => handleRenameSystem(modal.system, payload)}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </>
   );
 }
 
-// 1 nhóm System (hoặc nhóm "Chưa gán" khi system.id === null → không có nút rename/delete).
-function SystemGroup({ system, projects, treeProps, onAddProject, onRenameSystem, onDeleteSystem, onExportSystemFile, onExportSystemLark }) {
+// ─── SystemGroup ────────────────────────────────────────────────────────────
+function SystemGroup({ system, projects, treeProps, onAddProject, onEditSystem, onDeleteSystem, onExportSystemFile, onExportSystemLark }) {
   const [expanded, setExpanded] = useState(true);
   const isReal = system.id != null;
+
   return (
-    <div style={{ marginBottom: 4 }}>
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '4px 6px', borderRadius: 6,
-          background: 'rgba(255,255,255,0.04)', fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
-          textTransform: 'uppercase', opacity: isReal ? 0.95 : 0.6,
-        }}
-      >
+    <div style={{ marginBottom: 2 }}>
+      <div className="flex items-center gap-1 px-2 py-1 rounded hover:bg-white/5 group cursor-default">
         <button
           type="button"
-          className="tree-toggle-icon"
+          className="flex items-center justify-center w-4 h-4 text-zinc-500 hover:text-zinc-300 transition-colors"
           onClick={() => setExpanded(v => !v)}
-          title={expanded ? 'Thu gọn' : 'Mở rộng'}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}
         >
-          {expanded ? '▼' : '▶'}
+          <span className="text-[9px]">{expanded ? '▼' : '▶'}</span>
         </button>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={system.name}>
-          {isReal ? '🗂 ' : ''}{system.name}
-        </span>
-        <button type="button" title="Tạo Project trong nhóm này" onClick={onAddProject}
-          style={sysBtnStyle}>+P</button>
-        {isReal && onExportSystemFile && (
-          <button type="button" title="Export Excel/CSV toàn hệ thống" onClick={onExportSystemFile} style={sysBtnStyle}>⤓</button>
-        )}
-        {isReal && onExportSystemLark && (
-          <button type="button" title="Export Lark Base toàn hệ thống" onClick={onExportSystemLark} style={sysBtnStyle}>🦊</button>
-        )}
-        {isReal && (
-          <>
-            <button type="button" title="Đổi tên hệ thống" onClick={onRenameSystem} style={sysBtnStyle}>✎</button>
-            <button type="button" title="Xóa hệ thống" onClick={onDeleteSystem} style={{ ...sysBtnStyle, color: '#e74c3c' }}>×</button>
-          </>
-        )}
+
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden" onClick={() => setExpanded(v => !v)}>
+          {isReal
+            ? <FolderOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            : <Folder className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+          }
+          <span className="text-[11px] font-semibold text-slate-300 truncate tracking-wide" title={system.name}>
+            {system.name}
+          </span>
+        </div>
+
+        <DropdownMenu
+          align="right"
+          trigger={
+            <button
+              type="button"
+              className="flex items-center justify-center w-5 h-5 rounded hover:bg-white/10 text-zinc-600 hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-all"
+              title="Thao tác"
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+          }
+        >
+          <DropdownMenuItem onClick={onAddProject}>
+            <FolderPlus className="w-4 h-4 mr-2 text-indigo-400" />
+            Tạo Project
+          </DropdownMenuItem>
+          {isReal && onExportSystemFile && (
+            <DropdownMenuItem onClick={onExportSystemFile}>
+              <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
+              Export Excel/CSV
+            </DropdownMenuItem>
+          )}
+          {isReal && onExportSystemLark && (
+            <DropdownMenuItem onClick={onExportSystemLark}>
+              <Share2 className="w-4 h-4 mr-2 text-cyan-400" />
+              Export Lark Base
+            </DropdownMenuItem>
+          )}
+          {isReal && (
+            <>
+              <DropdownMenuItem onClick={onEditSystem}>
+                <Edit2 className="w-4 h-4 mr-2 text-amber-400" />
+                Chỉnh sửa
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDeleteSystem} destructive>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Xóa hệ thống
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenu>
       </div>
+
       {expanded && (
-        <div>
+        <div className="tree-children">
           {projects.map(p => (
-            <TreeNode key={p.id} node={p} {...treeProps} />
+            <TreeNode key={p.id} node={p} {...treeProps} level={1} />
           ))}
           {projects.length === 0 && (
-            <div className="empty-state" style={{ padding: '4px 10px', fontSize: 11, opacity: 0.55 }}>
-              Chưa có project. Bấm +P để tạo.
+            <div
+              className="text-[10px] text-zinc-600 italic pl-8 py-1 cursor-pointer hover:text-zinc-400 transition-colors"
+              onClick={onAddProject}
+            >
+              + Tạo project
             </div>
           )}
         </div>
@@ -163,8 +300,3 @@ function SystemGroup({ system, projects, treeProps, onAddProject, onRenameSystem
     </div>
   );
 }
-
-const sysBtnStyle = {
-  background: 'none', border: 'none', cursor: 'pointer', color: 'inherit',
-  fontSize: 11, fontWeight: 700, padding: '0 4px', opacity: 0.8,
-};

@@ -16,10 +16,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'windows-2022'
+          - platform: 'windows-latest'
             pkg_target: 'node20-win-x64'
             bin_name: 'hydra-server.exe'
-            tauri_args: '--bundles nsis'
+            tauri_args: ''
           - platform: 'ubuntu-22.04'
             pkg_target: 'node20-linux-x64'
             bin_name: 'hydra-server'
@@ -27,7 +27,7 @@ jobs:
           - platform: 'macos-latest'
             pkg_target: 'node20-macos-arm64'
             bin_name: 'hydra-server'
-            tauri_args: '--bundles dmg'
+            tauri_args: ''
 
     runs-on: ${{ matrix.platform }}
 
@@ -62,21 +62,15 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Setup MSVC environment (Windows only)
-        if: matrix.platform == 'windows-2022'
-        uses: ilammy/msvc-dev-cmd@v1
-
       - name: Install Node.js dependencies
         run: npm ci
 
       - name: Create binaries directory
-        shell: bash
         run: mkdir -p src-tauri/binaries
 
       # Dùng @yao-pkg/pkg để compile Node.js server thành file binary độc lập.
       # Người dùng cuối KHÔNG cần cài Node.js.
       - name: Bundle server into standalone binary
-        shell: bash
         run: |
           npx pkg src/server/app.js \
             --target ${{ matrix.pkg_target }} \
@@ -86,7 +80,6 @@ jobs:
             --public-packages "*"
 
       - name: Verify server binary exists
-        shell: bash
         run: |
           ls -lh src-tauri/binaries/
 
@@ -97,7 +90,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_SIGNING_IDENTITY: "-"
         with:
           tagName: v__VERSION__
           releaseName: 'HYDRA QA v__VERSION__'

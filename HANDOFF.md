@@ -5,6 +5,29 @@
 
 ---
 
+## Session hiện tại: 2026-07-09 — Tích hợp Tailwind v3, shadcn/ui components và dọn dẹp các icon button rườm rà
+
+### 1. Task đã hoàn thành
+- **Tích hợp Tailwind CSS v3**: Thêm tailwindcss, postcss, autoprefixer, cấu hình tailwind.config.js quét toàn bộ các file JS/JSX của web và PostCSS config.
+- **Tạo hệ thống component shadcn/ui**: Thiết lập thư mục `components/ui` chứa các components dùng chung `Button`, `Select`, `DropdownMenu` và `Dialog` được tinh chỉnh đẹp mắt theo theme màu tối Obsidian.
+- **Dọn dẹp icon button rườm rà & Gom nhóm tác vụ**:
+  - `ProjectSidebar`: Loại bỏ các emoji/text buttons thô (`+P`, `⤓`, `🦊`, `✎`, `×`), gom tất cả hành động vào một `DropdownMenu` với các icon Lucide tương ứng. Thay icon emoji thư mục bằng Lucide Folder icons.
+  - `TreeNode`: Refactor context menu sử dụng `DropdownMenu` của shadcn/ui.
+  - Output Panel Header trong `main.jsx`: Gom gọn 10+ nút bấm lộn xộn thành 2 menu dropdown "Tải xuống" & "Đồng bộ Lark" sử dụng shadcn `Button` và Lucide icons.
+  - `TestCaseTable`: Khóa co giãn dọc textarea, dùng `Select` component, đổi emoji rác `🗑️` sang Lucide `Trash2` icon và tự động lưu kích thước cột sau khi kéo thả vào `localStorage`.
+- **Verify Build**: Chạy `npm run build` thành công, 1833 modules biên dịch trơn tru mà không có lỗi.
+
+---
+
+## Session trước: 2026-07-09 — Sửa lỗi thiếu ENCRYPTION_KEY, cải tiến fallback AI router và thêm Codex API key config
+
+### 1. Task đã hoàn thành
+- **Tạo file `.env`**: Tạo file `.env` chứa khóa `ENCRYPTION_KEY` ngẫu nhiên giúp sửa lỗi `ENCRYPTION_KEY is required to encrypt or decrypt provider keys`.
+- **Sửa logic fallback AI router**: Cập nhật `src/server/services/ai-router.service.js` để tự động thử với provider tiếp theo đối với bất kỳ lỗi nào từ provider hiện tại (chẳng hạn lỗi `High Demand` / 503 / 429 quá tải của Gemini), thay vì chỉ giới hạn ở lỗi `QUOTA_EXCEEDED` và `NO_KEY`.
+- **Tích hợp Codex API key config**: Thêm trường nhập Codex API Key vào `ProviderSettingsModal` của UI, hỗ trợ quản lý trạng thái động thông qua hook `useProviderSettings`, và mở rộng backend (/status route và router) để hỗ trợ lưu trữ/kiểm tra trạng thái của provider `codex`.
+
+---
+
 ## Session gần nhất: 2026-07-08 (máy Windows, phiên Export scope) — Export Test Case phạm vi rộng (System/Project/Module/Screen/Feature): Excel/CSV + Lark Base, 0 token AI
 
 User đưa 1 implementation plan (feature Export TC phạm vi rộng, tách 2 hành động: Excel/CSV + Lark Base). Sau khi đối chiếu plan với code thật, phát hiện mô hình Lark hiện tại là **LINK theo project** (không phải push tự do theo URL như plan giả định) → điều chỉnh cách làm. User chốt: **build đè lên working tree hiện tại + commit chung 1 lần cuối**, **làm cả CSV lẫn Lark cùng lúc**. Feature 100% additive, thuần code (0 token AI). Build + smoke-test logic PASS; **Lark push CHƯA verify (thiếu creds)**; **CHƯA click-test UI**; **backend đang chạy là bản CŨ → phải restart**.

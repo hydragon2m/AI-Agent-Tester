@@ -1,12 +1,8 @@
-const FIELD_LABELS = {
-  name: 'Name',
-  type: 'Type',
-  priority: 'Priority',
-  preconditions: 'Preconditions',
-  steps: 'Steps',
-  expectedResult: 'Expected',
-  testData: 'Test Data',
-};
+import React from 'react';
+import { Button } from '../ui/Button';
+import { Check, Info, AlertTriangle, PlusCircle } from 'lucide-react';
+
+const ROW_ORDER = { modify: 0, delete: 0, keep: 1 };
 
 function formatFieldValue(field, value) {
   if (field === 'steps' && Array.isArray(value)) {
@@ -21,59 +17,65 @@ function changedFieldsMap(changes) {
   return map;
 }
 
-const ROW_ORDER = { modify: 0, delete: 0, keep: 1 };
-
 function ReviewRow({ tc, review, decision, onToggleDecision }) {
   const action = review?.action || 'keep';
   const changes = changedFieldsMap(review?.changes);
-  const rowClass = action === 'delete' ? 'tc-review-row-delete' : action === 'modify' ? 'tc-review-row-modify' : '';
+  const rowClass = action === 'delete' ? 'bg-red-500/10 border-l-2 border-red-500' : action === 'modify' ? 'bg-amber-500/10 border-l-2 border-amber-500' : '';
 
   function renderCell(field, plainValue) {
     const change = changes.get(field);
     if (action === 'modify' && change) {
       return (
-        <td className="tc-diff-cell">
-          <div className="diff-old">{formatFieldValue(field, change.oldValue)}</div>
-          <div className="diff-new">{formatFieldValue(field, change.newValue)}</div>
+        <td className="p-2 border-b border-border align-top text-xs">
+          <div className="text-red-400 line-through mb-1">{formatFieldValue(field, change.oldValue)}</div>
+          <div className="text-emerald-400">{formatFieldValue(field, change.newValue)}</div>
         </td>
       );
     }
-    return <td>{formatFieldValue(field, plainValue)}</td>;
+    return <td className="p-2 border-b border-border align-top text-xs text-slate-300">{formatFieldValue(field, plainValue)}</td>;
   }
 
   return (
     <tr className={rowClass}>
-      <td>{tc.id}</td>
-      <td>{tc.module || '-'}</td>
+      <td className="p-2 border-b border-border align-top font-bold text-xs text-amber-500">{tc.id}</td>
+      <td className="p-2 border-b border-border align-top text-xs text-slate-400">{tc.module || '-'}</td>
       {renderCell('name', tc.name)}
-      {renderCell('type', <span className={`tc-badge type-${String(tc.type || '').toLowerCase().replace(/\W+/g, '-')}`}>{tc.type}</span>)}
-      {renderCell('priority', <span className={`tc-badge prio-${String(tc.priority || '').toLowerCase()}`}>{tc.priority}</span>)}
+      {renderCell('type', <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">{tc.type}</span>)}
+      {renderCell('priority', <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-350">{tc.priority}</span>)}
       {renderCell('preconditions', tc.preconditions)}
       {renderCell('steps', tc.steps || [])}
       {renderCell('expectedResult', tc.expectedResult)}
-      <td className="tc-review-action-cell">
-        {action === 'modify' && (
-          <label className="tc-review-checkbox">
-            <input
-              type="checkbox"
-              checked={decision === 'apply'}
-              onChange={e => onToggleDecision(tc.id, e.target.checked ? 'apply' : 'keep')}
-            />
-            Áp dụng sửa
-          </label>
-        )}
-        {action === 'delete' && (
-          <label className="tc-review-checkbox">
-            <input
-              type="checkbox"
-              checked={decision === 'remove'}
-              onChange={e => onToggleDecision(tc.id, e.target.checked ? 'remove' : 'keep')}
-            />
-            Xoá case này
-          </label>
-        )}
-        {action === 'keep' && <span className="tc-badge tc-badge-ok">✓ Đạt</span>}
-        {review?.reason && <div className="tc-review-reason">{review.reason}</div>}
+      <td className="p-2 border-b border-border align-top text-xs min-w-[140px]">
+        <div className="flex flex-col gap-2">
+          {action === 'modify' && (
+            <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-border bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 w-3.5 h-3.5"
+                checked={decision === 'apply'}
+                onChange={e => onToggleDecision(tc.id, e.target.checked ? 'apply' : 'keep')}
+              />
+              Áp dụng sửa
+            </label>
+          )}
+          {action === 'delete' && (
+            <label className="flex items-center gap-1.5 text-xs text-red-400 cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-border bg-slate-950 text-red-600 focus:ring-red-500 focus:ring-offset-slate-900 w-3.5 h-3.5"
+                checked={decision === 'remove'}
+                onChange={e => onToggleDecision(tc.id, e.target.checked ? 'remove' : 'keep')}
+              />
+              Xoá case này
+            </label>
+          )}
+          {action === 'keep' && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 uppercase">
+              <Check className="w-3.5 h-3.5" /> Đạt
+            </span>
+          )}
+          {review?.reason && <div className="text-[10px] text-slate-400 mt-1 italic leading-normal">{review.reason}</div>}
+        </div>
       </td>
     </tr>
   );
@@ -102,35 +104,35 @@ export function TestCaseReviewPanel({
   });
 
   return (
-    <div className="tc-review-panel">
-      <div className="tc-review-toolbar">
-        <div className="tc-review-summary">
-          {review.summary && <p>{review.summary}</p>}
-          <span className="tc-review-counts">
+    <div className="space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border border-border bg-slate-900/40 p-4 rounded-md">
+        <div className="space-y-1">
+          {review.summary && <p className="text-xs text-slate-350 leading-relaxed">{review.summary}</p>}
+          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
             {modifyCount} đề xuất sửa · {deleteCount} đề xuất xoá · {newCount} case mới
-          </span>
+          </div>
         </div>
-        <div className="tc-review-toolbar-actions">
-          <button className="btn-secondary" onClick={onAcceptAll}>Áp dụng tất cả đề xuất</button>
-          <button className="btn-secondary" onClick={onKeepAll}>Giữ nguyên tất cả</button>
-          <button className="btn-secondary" onClick={onDismiss}>Bỏ qua đánh giá</button>
-          <button className="btn-primary" onClick={onApply}>Áp dụng lựa chọn</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={onAcceptAll}>Áp dụng tất cả</Button>
+          <Button variant="outline" size="sm" onClick={onKeepAll}>Giữ nguyên</Button>
+          <Button variant="ghost" size="sm" onClick={onDismiss}>Bỏ qua</Button>
+          <Button variant="default" size="sm" onClick={onApply}>Áp dụng</Button>
         </div>
       </div>
 
       <div className="tc-table-wrapper">
-        <table className="tc-table">
+        <table className="w-full border-collapse text-left">
           <thead>
-            <tr>
-              <th>TC ID</th>
-              <th>Module</th>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Priority</th>
-              <th>Preconditions</th>
-              <th>Steps</th>
-              <th>Expected</th>
-              <th>Đề xuất</th>
+            <tr className="bg-slate-900 border-b border-border">
+              <th className="p-2 text-xs font-semibold text-slate-400">TC ID</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Module</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Name</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Type</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Priority</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Preconditions</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Steps</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Expected</th>
+              <th className="p-2 text-xs font-semibold text-slate-400">Đề xuất</th>
             </tr>
           </thead>
           <tbody>
@@ -148,32 +150,37 @@ export function TestCaseReviewPanel({
       </div>
 
       {newCount > 0 && (
-        <div className="tc-review-suggestions">
-          <div className="output-list-header">
+        <div className="border border-border bg-slate-900/20 p-4 rounded-md space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
+            <PlusCircle className="w-4 h-4 text-emerald-400" />
             <span>Đề xuất Test Case mới</span>
-            <span className="output-count-badge">{newCount}</span>
+            <span className="bg-slate-800 text-slate-350 px-2 py-0.5 rounded text-[10px]">
+              {newCount}
+            </span>
           </div>
-          {review.newSuggestions.map((s, idx) => (
-            <div className="tc-review-suggestion-row" key={idx}>
-              <label className="tc-review-checkbox">
-                <input
-                  type="checkbox"
-                  checked={!!newSuggestionDecisions[idx]}
-                  onChange={e => onToggleSuggestion(idx, e.target.checked)}
-                />
-                Thêm case này
-              </label>
-              <div className="tc-review-suggestion-body">
-                <div>
-                  <span className={`tc-badge type-${String(s.testCase.type || '').toLowerCase().replace(/\W+/g, '-')}`}>{s.testCase.type}</span>{' '}
-                  <span className={`tc-badge prio-${String(s.testCase.priority || '').toLowerCase()}`}>{s.testCase.priority}</span>{' '}
-                  <strong>{s.testCase.name}</strong>
+          <div className="grid gap-3">
+            {review.newSuggestions.map((s, idx) => (
+              <div className="flex gap-4 p-3 rounded-md bg-slate-950 border border-border" key={idx}>
+                <div className="pt-0.5">
+                  <input
+                    type="checkbox"
+                    className="rounded border-border bg-slate-900 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                    checked={!!newSuggestionDecisions[idx]}
+                    onChange={e => onToggleSuggestion(idx, e.target.checked)}
+                  />
                 </div>
-                <div className="tc-review-reason">{s.reason}</div>
-                <div>{s.testCase.expectedResult}</div>
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-semibold">{s.testCase.type}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-350 font-semibold">{s.testCase.priority}</span>
+                    <strong className="text-xs text-slate-200">{s.testCase.name}</strong>
+                  </div>
+                  {s.reason && <div className="text-[10px] text-slate-400 leading-normal italic">{s.reason}</div>}
+                  <div className="text-xs text-slate-300 bg-slate-900/40 p-2 rounded border border-border/30">{s.testCase.expectedResult}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -1,21 +1,34 @@
 import hydraLogo from '../../hydra-logo.png';
+import { Button } from '../ui/Button';
+import { Settings } from 'lucide-react';
 
 export function AppHeader({ demoMode, setDemoMode, onOpenSettings }) {
   return (
-    <header className="header">
-      <div className="header-inner">
-        <div className="logo">
-          <img src={hydraLogo} alt="Hydra Logo" className="logo-img" style={{ height: '36px', width: 'auto', display: 'block' }} />
-          <div className="logo-text">
-            <span className="logo-title" style={{ fontSize: '1.2rem', letterSpacing: '0.05em' }}>AI QA Assistant</span>
-            <span className="logo-sub">Hanhdth</span>
+    <header className="header border-b border-zinc-800 bg-[#09090b]/80 backdrop-blur-md sticky top-0 z-[100]">
+      <div className="max-w-full h-full flex items-center justify-between px-6 gap-4">
+        <div className="flex items-center gap-3">
+          <img src={hydraLogo} alt="Hydra Logo" className="h-9 w-auto block" />
+          <div className="flex flex-col">
+            <span className="text-[1.1rem] font-bold text-slate-100 tracking-wide">AI QA Assistant</span>
+            <span className="text-[0.7rem] text-slate-400 font-mono">Hanhdth</span>
           </div>
         </div>
-        <div className="header-actions">
-          <button className={`btn-secondary ${demoMode ? 'active' : ''}`} onClick={() => setDemoMode(v => !v)}>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant={demoMode ? 'default' : 'secondary'} 
+            size="sm"
+            onClick={() => setDemoMode(v => !v)}
+          >
             Demo
-          </button>
-          <button className="btn-icon" onClick={onOpenSettings} title="Provider settings">⚙</button>
+          </Button>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={onOpenSettings} 
+            title="Provider settings"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     </header>

@@ -8,17 +8,15 @@ export async function requestJson(url, options = {}) {
     ...options,
   });
   const bodyText = await res.text().catch(() => '');
+  let body = null;
+  try {
+    body = bodyText ? JSON.parse(bodyText) : null;
+  } catch (err) {
+    body = { error: bodyText };
+  }
   if (!res.ok) {
-    let body = null;
-    try {
-      body = bodyText ? JSON.parse(bodyText) : null;
-    } catch (err) {}
     const message = body?.message || body?.error || bodyText || `HTTP ${res.status}`;
     throw new Error(message);
   }
-  try {
-    return bodyText ? JSON.parse(bodyText) : null;
-  } catch (err) {
-    throw new Error('Phản hồi từ server không đúng định dạng JSON');
-  }
+  return body;
 }

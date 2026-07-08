@@ -9,6 +9,8 @@ import { previewVisibleSkillIds } from '../../utils/skill-gating';
 import { SKILLS } from '../../features/skills/skill-registry';
 import { createNodeApi } from '../../backend-api/nodes.api';
 import { createStrategyApi } from '../../backend-api/strategy.api';
+import { Button } from '../ui/Button';
+import { X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 
 // Wizard 3 bước tạo Project + Test Plan trong 1 System.
 //   B1: tên dự án (+ context)  →  B2: chọn template  →  B3: toggle stage + preview skill (Screen).
@@ -63,21 +65,23 @@ export function CreateProjectModal({ systemId, systemName, onClose, onCreated, o
   }
 
   return (
-    <div className="modal-overlay" style={{ display: 'flex' }}>
-      <div className="modal modal-wide">
-        <div className="modal-header">
-          <h2>Tạo Project mới{systemName ? ` — ${systemName}` : ''}</h2>
-          <button className="btn-close" onClick={onClose} disabled={saving}>×</button>
+    <div className="modal-overlay flex items-center justify-center fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm p-4">
+      <div className="modal modal-wide w-full max-w-2xl bg-slate-900 border border-border rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="modal-header flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">Tạo Project mới{systemName ? ` — ${systemName}` : ''}</h2>
+          <Button variant="ghost" size="icon" onClick={onClose} disabled={saving} className="h-8 w-8 text-slate-400 hover:text-white rounded-md">
+            <X className="w-4 h-4" />
+          </Button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body p-5 space-y-4">
           <StepIndicator step={step} />
 
           {step === 1 && (
-            <>
-              <div className="pf-field">
-                <label className="pf-label">Tên dự án *</label>
+            <div className="space-y-4">
+              <div className="pf-field flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-350">Tên dự án *</label>
                 <input
-                  className="pf-input"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-slate-950 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   autoFocus
                   value={name}
                   onChange={e => setName(e.target.value)}
@@ -85,39 +89,35 @@ export function CreateProjectModal({ systemId, systemName, onClose, onCreated, o
                   onKeyDown={e => { if (e.key === 'Enter' && name.trim()) setStep(2); }}
                 />
               </div>
-              <div className="pf-field">
-                <label className="pf-label">Context / mô tả (tùy chọn)</label>
+              <div className="pf-field flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-350">Context / mô tả (tùy chọn)</label>
                 <textarea
-                  className="pf-input"
-                  style={{ minHeight: 60, resize: 'vertical' }}
+                  className="w-full min-h-[80px] p-3 rounded-md border border-border bg-slate-950 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                   value={context}
                   onChange={e => setContext(e.target.value)}
                   placeholder="Bối cảnh nghiệp vụ, stack, ghi chú..."
                 />
               </div>
-            </>
+            </div>
           )}
 
           {step === 2 && (
-            <div className="pf-field">
-              <label className="pf-label">Loại dự án (quyết định các stage test bật mặc định)</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="pf-field flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-350 mb-2">Loại dự án (quyết định các stage test bật mặc định)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {STRATEGY_TEMPLATES.map(t => {
                   const active = t.key === template;
                   return (
                     <button
-                      key={t.key} type="button" onClick={() => chooseTemplate(t.key)}
-                      style={{
-                        textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                        border: `1px solid ${active ? 'var(--accent-color, #f0a000)' : 'var(--border-color, #444)'}`,
-                        background: active ? 'rgba(240,160,0,0.10)' : 'var(--panel-bg-alt, #222)',
-                        color: 'var(--text-color, #fff)',
-                      }}
+                      key={t.key} 
+                      type="button" 
+                      onClick={() => chooseTemplate(t.key)}
+                      className={`text-left p-3.5 rounded-lg border cursor-pointer transition-all duration-150 ${active ? 'border-indigo-500 bg-indigo-500/10 text-white' : 'border-border bg-slate-950 text-slate-300 hover:border-slate-700'}`}
                     >
-                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{t.label}</div>
-                      <div style={{ fontSize: 11, opacity: 0.7 }}>{t.desc}</div>
-                      <div style={{ fontSize: 10, opacity: 0.55, marginTop: 4 }}>
-                        {t.enabledByDefault.length} stage mặc định: {t.enabledByDefault.join(', ') || '—'}
+                      <div className="font-bold text-xs mb-1 text-slate-100">{t.label}</div>
+                      <div className="text-[10px] text-slate-400 leading-relaxed mb-2">{t.desc}</div>
+                      <div className="text-[9px] text-slate-500">
+                        {t.enabledByDefault.length} stage: {t.enabledByDefault.join(', ') || '—'}
                       </div>
                     </button>
                   );
@@ -127,52 +127,39 @@ export function CreateProjectModal({ systemId, systemName, onClose, onCreated, o
           )}
 
           {step === 3 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 16 }}>
-              <div>
-                <label className="pf-label">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-350 block">
                   Stage test — bật {enabledCount}/{stages.length} (template: {getTemplate(template)?.label || template})
                 </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                <div className="flex flex-col gap-2">
                   {stages.map(s => (
                     <button
-                      key={s.key} type="button" onClick={() => toggleStage(s.key)}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                        padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                        border: `1px solid ${s.enabled ? 'var(--accent-color, #f0a000)' : 'var(--border-color, #444)'}`,
-                        background: s.enabled ? 'rgba(240,160,0,0.06)' : 'rgba(255,255,255,0.02)',
-                        color: 'var(--text-color, #fff)', opacity: s.enabled ? 1 : 0.6,
-                      }}
+                      key={s.key} 
+                      type="button" 
+                      onClick={() => toggleStage(s.key)}
+                      className={`flex items-center justify-between gap-3 p-2.5 rounded-md border cursor-pointer text-left transition-all ${s.enabled ? 'border-indigo-500 bg-indigo-500/5 text-white opacity-100' : 'border-border bg-slate-950/40 text-slate-400 opacity-60 hover:opacity-80'}`}
                     >
-                      <span style={{ fontWeight: 600, fontSize: 12.5 }}>{s.activity}</span>
-                      <span style={{
-                        minWidth: 42, textAlign: 'center', padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700,
-                        color: s.enabled ? '#0b0b0b' : '#fff', background: s.enabled ? '#2ecc71' : 'var(--panel-bg-alt, #444)',
-                      }}>
+                      <span className="font-bold text-xs">{s.activity}</span>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${s.enabled ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
                         {s.enabled ? 'ON' : 'OFF'}
                       </span>
                     </button>
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="pf-label">Skill sẽ hiện ở màn hình (Screen)</label>
-                <div style={{
-                  marginTop: 6, padding: '10px 12px', borderRadius: 8,
-                  border: '1px dashed var(--border-color, #444)', background: 'rgba(255,255,255,0.03)',
-                }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-350 block">Skill sẽ hiện ở màn hình (Screen)</label>
+                <div className="p-3.5 rounded-md border border-dashed border-border bg-slate-950/40 space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
                     {previewSkills.map(id => (
-                      <span key={id} style={{
-                        fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 12,
-                        border: '1px solid #2ecc71', color: '#2ecc71',
-                      }}>
+                      <span key={id} className="text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30 text-emerald-400 bg-emerald-500/5">
                         {SKILLS[id]?.label || id}
                       </span>
                     ))}
-                    {previewSkills.length === 0 && <span className="pf-hint">Không có skill nào.</span>}
+                    {previewSkills.length === 0 && <span className="text-xs text-slate-500 italic">Không có skill nào.</span>}
                   </div>
-                  <div className="pf-hint" style={{ marginTop: 8, fontSize: 10.5 }}>
+                  <div className="text-[10px] text-slate-500 leading-normal">
                     Bật/tắt stage bên trái để xem skill thay đổi. Skill nền tảng (SRS, Bug Analyzer) luôn hiện.
                   </div>
                 </div>
@@ -180,18 +167,22 @@ export function CreateProjectModal({ systemId, systemName, onClose, onCreated, o
             </div>
           )}
 
-          <div className="modal-actions">
-            <button className="btn-secondary" onClick={onClose} disabled={saving}>Hủy</button>
-            {step > 1 && <button className="btn-secondary" onClick={() => setStep(step - 1)} disabled={saving}>← Quay lại</button>}
+          <div className="modal-actions flex items-center justify-end gap-2 border-t border-border pt-4 mt-5">
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>Hủy</Button>
+            {step > 1 && (
+              <Button variant="secondary" size="sm" onClick={() => setStep(step - 1)} disabled={saving}>
+                <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Quay lại
+              </Button>
+            )}
             {step < 3 && (
-              <button className="btn-primary" onClick={() => setStep(step + 1)} disabled={step === 1 && !name.trim()}>
-                Tiếp →
-              </button>
+              <Button variant="default" size="sm" onClick={() => setStep(step + 1)} disabled={step === 1 && !name.trim()}>
+                Tiếp <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
             )}
             {step === 3 && (
-              <button className="btn-primary" onClick={handleSave} disabled={saving}>
+              <Button variant="default" size="sm" onClick={handleSave} disabled={saving}>
                 {saving ? 'Đang lưu...' : 'Lưu kế hoạch'}
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -203,20 +194,18 @@ export function CreateProjectModal({ systemId, systemName, onClose, onCreated, o
 function StepIndicator({ step }) {
   const labels = ['Tên dự án', 'Chọn template', 'Cấu hình stage'];
   return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+    <div className="flex gap-2 mb-4">
       {labels.map((label, i) => {
         const n = i + 1;
         const active = n === step;
         const done = n < step;
         return (
-          <div key={n} style={{
-            flex: 1, textAlign: 'center', fontSize: 11, fontWeight: 600, padding: '5px 4px', borderRadius: 6,
-            border: `1px solid ${active ? 'var(--accent-color, #f0a000)' : 'var(--border-color, #444)'}`,
-            background: active ? 'rgba(240,160,0,0.12)' : (done ? 'rgba(46,204,113,0.08)' : 'transparent'),
-            color: active ? 'var(--accent-color, #f0a000)' : (done ? '#2ecc71' : 'inherit'),
-            opacity: active || done ? 1 : 0.55,
-          }}>
-            {done ? '✓' : n}. {label}
+          <div 
+            key={n} 
+            className={`flex-1 text-center text-[10px] font-bold py-1.5 px-1 rounded-md border transition-all ${active ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 opacity-100' : done ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400 opacity-100' : 'border-border bg-transparent text-slate-500 opacity-55'}`}
+          >
+            {done ? <Check className="w-3 h-3 inline-block mr-1 align-text-top" /> : `${n}. `}
+            {label}
           </div>
         );
       })}

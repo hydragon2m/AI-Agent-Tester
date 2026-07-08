@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { getTemplate, templateShort } from '../../features/skills/strategy-templates';
+import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu';
+import { Plus, Edit2, FileSpreadsheet, Share2, Trash2, MoreHorizontal, ChevronDown, ChevronRight } from 'lucide-react';
 
 const NODE_TYPES = ['project', 'module', 'screen', 'feature'];
 const NEXT_TYPE = { project: 'module', module: 'screen', screen: 'feature', feature: 'feature' };
@@ -34,24 +36,11 @@ function PlanBadge({ template, status }) {
 
 export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, onExportFile, onExportLark, level = 0 }) {
   const [expanded, setExpanded] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
   const children = nodes.filter(n => n.parentId === node.id);
   const hasChildren = children.length > 0;
   const isActive = activeNodeId === node.id;
   const nextType = NEXT_TYPE[node.type] || 'feature';
   const canAdd = NODE_TYPES.indexOf(node.type) < NODE_TYPES.length - 1;
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleClickOutside = e => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [menuOpen]);
-
-  const runAction = fn => { setMenuOpen(false); fn(); };
 
   return (
     <div>
@@ -72,22 +61,47 @@ export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename,
           </span>
           {node.type === 'project' && <PlanBadge template={node.planTemplate} status={node.planStatus} />}
         </button>
-        <div className={`tree-node-menu ${menuOpen ? 'open' : ''}`} ref={menuRef}>
-          <button
-            type="button"
-            className="tree-more-btn"
-            title="Chức năng"
-            onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
-          >⋯</button>
-          {menuOpen && (
-            <div className="tree-context-menu">
-              {canAdd && <button onClick={() => runAction(() => onAdd(node.id, nextType))}>+ Thêm {nextType}</button>}
-              <button onClick={() => runAction(() => onRename(node))}>✎ Đổi tên</button>
-              {onExportFile && <button onClick={() => runAction(() => onExportFile({ id: node.id, name: node.name, type: node.type }))}>⤓ Export Excel/CSV</button>}
-              {onExportLark && <button onClick={() => runAction(() => onExportLark({ id: node.id, name: node.name, type: node.type }))}>🦊 Export to Lark</button>}
-              <button className="text-red" onClick={() => runAction(() => onDelete(node))}>× Xóa</button>
-            </div>
-          )}
+
+        <div className="tree-node-menu">
+          <DropdownMenu 
+            align="right"
+            trigger={
+              <button
+                type="button"
+                className="tree-more-btn flex items-center justify-center w-5 h-5 rounded hover:bg-white/10 text-slate-400 hover:text-white"
+                title="Chức năng"
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              </button>
+            }
+          >
+            {canAdd && (
+              <DropdownMenuItem onClick={() => onAdd(node.id, nextType)}>
+                <Plus className="w-4 h-4 mr-2 text-indigo-400" />
+                Thêm {nextType}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => onRename(node)}>
+              <Edit2 className="w-4 h-4 mr-2 text-amber-400" />
+              Đổi tên
+            </DropdownMenuItem>
+            {onExportFile && (
+              <DropdownMenuItem onClick={() => onExportFile({ id: node.id, name: node.name, type: node.type })}>
+                <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
+                Export Excel/CSV
+              </DropdownMenuItem>
+            )}
+            {onExportLark && (
+              <DropdownMenuItem onClick={() => onExportLark({ id: node.id, name: node.name, type: node.type })}>
+                <Share2 className="w-4 h-4 mr-2 text-cyan-400" />
+                Export to Lark
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => onDelete(node)} destructive>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Xóa
+            </DropdownMenuItem>
+          </DropdownMenu>
         </div>
       </div>
       {hasChildren && expanded && (
