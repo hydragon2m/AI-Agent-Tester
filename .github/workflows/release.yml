@@ -68,22 +68,15 @@ jobs:
         run: npm ci
 
       - name: Create binaries directory
-        run: mkdir -p src-tauri/binaries
+        run: node -e "require('fs').mkdirSync('src-tauri/binaries', { recursive: true })"
 
       # Dùng @yao-pkg/pkg để compile Node.js server thành file binary độc lập.
       # Người dùng cuối KHÔNG cần cài Node.js.
       - name: Bundle server into standalone binary
-        run: |
-          npx pkg src/server/app.js \
-            --target ${{ matrix.pkg_target }} \
-            --output src-tauri/binaries/${{ matrix.bin_name }} \
-            --no-bytecode \
-            --public \
-            --public-packages "*"
+        run: npx pkg src/server/app.js --target ${{ matrix.pkg_target }} --output src-tauri/binaries/${{ matrix.bin_name }} --no-bytecode --public --public-packages "*"
 
       - name: Verify server binary exists
-        run: |
-          ls -lh src-tauri/binaries/
+        run: node -e "for (const entry of require('fs').readdirSync('src-tauri/binaries', { withFileTypes: true })) console.log(entry.name)"
 
       - name: Build frontend (Vite)
         run: npm run build
