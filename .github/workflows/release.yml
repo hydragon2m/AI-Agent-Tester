@@ -19,7 +19,7 @@ jobs:
           - platform: 'windows-2022'
             pkg_target: 'node20-win-x64'
             bin_name: 'hydra-server.exe'
-            tauri_args: ''
+            tauri_args: '--bundles nsis'
           - platform: 'ubuntu-22.04'
             pkg_target: 'node20-linux-x64'
             bin_name: 'hydra-server'
@@ -27,7 +27,7 @@ jobs:
           - platform: 'macos-latest'
             pkg_target: 'node20-macos-arm64'
             bin_name: 'hydra-server'
-            tauri_args: ''
+            tauri_args: '--bundles dmg'
 
     runs-on: ${{ matrix.platform }}
 
@@ -97,6 +97,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: ""
         with:
           tagName: v__VERSION__
           releaseName: 'HYDRA QA v__VERSION__'
