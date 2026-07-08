@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createNodeApi, deleteNodeApi, fetchNodes, updateNodeApi } from '../backend-api/nodes.api';
 
 export function buildNodePath(nodes, activeNodeId) {
+  if (!Array.isArray(nodes)) return [];
   const path = [];
   let curr = nodes.find(n => n.id === activeNodeId);
   while (curr) {
@@ -28,8 +29,12 @@ export function useProjectTree(onToast) {
 
   async function refreshTree() {
     const data = await fetchNodes();
-    setNodes(data);
-    setActiveNodeId(current => current || data[0]?.id || null);
+    if (Array.isArray(data)) {
+      setNodes(data);
+      setActiveNodeId(current => current || data[0]?.id || null);
+    } else {
+      throw new Error('Dữ liệu cây thư mục không hợp lệ');
+    }
   }
 
   useEffect(() => {
@@ -104,6 +109,7 @@ export function useProjectTree(onToast) {
 }
 
 function getDepth(node, nodes) {
+  if (!Array.isArray(nodes)) return 0;
   let depth = 0;
   let current = node;
   while (current?.parentId) {
