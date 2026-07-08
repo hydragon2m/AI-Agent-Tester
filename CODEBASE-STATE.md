@@ -483,8 +483,69 @@ OutputPanel không render nổi → bug "[object Object]".
 - Kết luận "gen strategy lỗi" khi chưa probe route `/api/strategies` (400 khi thiếu
   param = backend mới; 404 = backend cũ chưa restart).
 
-**CHƯA làm (cần session sau):** TS-F8 (dashboard %/status theo stage) + TS-F9
-(release gate auto) — chờ F3 Lark status sync. UI chưa click-test qua browser thật.
+> ⚠️ **FLOW 7 đã được NÂNG CẤP ở phiên 2026-07-08 (System Layer + Test Plan + Skill
+> Gating)** — project node giờ hiện `StrategyPanel` **2 tab**, và có thêm tầng System +
+> skill gating. Xem **FLOW 8** bên dưới cho hành vi hiện tại.
+
+---
+
+### FLOW 8 — System Layer + Test Plan + Skill Gating (nâng cấp 2026-07-08, GỘP vào FLOW 7)
+
+```
+CÂY MỚI: System → Project → Module → Screen → Feature
+(System = bảng `systems` riêng; Project vẫn là node type='project' trong bảng `nodes`,
+ trỏ về system qua cột projects.system_id — vì project node id === projects.id).
+
+[ProjectSidebar.jsx] fetch /api/systems → nhóm project theo systemId.
+  - Nút "+ System" (header) tạo system (prompt tên/mô tả).
+  - Mỗi system: nút "+P" mở CreateProjectModal; ✎ đổi tên; × xóa (KHÔNG xóa project,
+    chỉ set system_id=NULL → project về nhóm "Chưa gán hệ thống").
+  - Badge trên node project: ✓<mã ngắn> (xanh, plan đã cấu hình) / "Draft" (vàng, chưa).
+    Nhãn template đầy đủ ở tooltip. Data badge lấy từ /tree (getNodes JOIN + subquery
+    plan_template/plan_status từ test_strategies mới nhất).
+    ↓
+[CreateProjectModal.jsx] wizard 3 bước:
+  B1 tên project → B2 chọn 1/5 template (new_feature/feature_addition/hotfix/
+  new_version/full_product) → B3 toggle 6 stage (api/smoke/manual/regression/
+  performance/security) + PREVIEW skill hiện cho Screen (previewVisibleSkillIds).
+  "Lưu kế hoạch" → POST /tree (type=project, kèm systemId) + POST /api/strategies
+  (tái dùng bảng test_strategies, status='configured', stages=toggle).
+    ↓
+SKILL GATING (utils/skill-gating.js) — khi chọn node KHÁC project:
+  main.jsx fetch plan của project chứa node (fetchStrategyApi(node.projectId)) →
+  getVisibleSkillIds(nodeType, plan):
+    - plan CHƯA cấu hình (null/draft) → hiện ĐỦ skill (backward-compat) + BANNER VÀNG
+      "chưa có kế hoạch test" + nút "Tạo kế hoạch test →" (chọn node project).
+    - plan ĐÃ configured/approved → chỉ hiện ALWAYS_ON_SKILLS (srs, buganalyzer) +
+      skill của các activity đang bật (api→apitest; smoke/manual/regression→testcase;
+      manual→uitest; performance→performance; security→security), lọc theo
+      SKILL_APPLICABLE_NODES. SkillSidebar nhận visibleSkillIds; nếu skill đang chọn
+      bị ẩn → main.jsx tự nhảy sang skill hiển thị đầu tiên.
+    ↓
+NODE PROJECT → StrategyPanel 2 tab:
+  - Tab "Kế hoạch test": generate/review/current cũ + nút "✎ Chỉnh stage" (toggle
+    ON/OFF rồi "Lưu thay đổi" → updateStrategyApi status='configured', KHÔNG cần AI).
+  - Tab "Release Check": GET /api/strategies/release-check?projectId= →
+    getReleaseCheck gom test_cases theo cột `stage`, tính %pass/fail/block mỗi stage
+    (chỉ các stage đang bật nếu plan configured), blockers, badge Go/No-go
+    (go/no-go/pending). Cảnh báo TC chưa gán stage (unassignedCount).
+```
+
+**⛔ KHÔNG ĐƯỢC (bổ sung cho FLOW 8):**
+- Tạo bảng `test_plans` / route `/api/test-plans` — Test Plan TÁI DÙNG `test_strategies`
+  + `/api/strategies` (đã có thêm `release-check`).
+- Tạo `config/strategy-templates.js` thứ 2 — chỉ 1 file `features/skills/strategy-templates.js`
+  (5 template; đã bỏ `new_product`/`custom`).
+- Bỏ filter internal trong SkillSidebar — `visibleSkillIds` chồng THÊM, không thay thế.
+- Nhét `system_id` vào bảng `nodes` — nó ở bảng `projects`; tree lộ qua LEFT JOIN.
+- Ép `createStrategy` về draft — phải nhận `'configured'`.
+- Tạo `TestPlanPanel` song song — Test Plan sống trong `StrategyPanel` (2 tab).
+- In nhãn template dài vào badge (che tên) — dùng `templateShort()`.
+
+**CHƯA verify:** toàn bộ luồng UI click-test qua browser thật (backend đã e2e + probe
+live; frontend mới build + esbuild compile). **Còn thiếu để chạy thật đầy đủ**: (a) gán
+cột `stage` cho TC khi gen (chưa có), (b) F3 Lark→Tool status sync để Release Check có
+status TC thật.
 
 ---
 
@@ -544,8 +605,11 @@ OutputPanel không render nổi → bug "[object Object]".
 | F6 | Multi-user + phân quyền | 📋 Planned | QA vs QA Lead roles |
 | TS-F6 | Test Strategy Generator (skill `teststrategy`) | ✅ Code done | Sinh JSON stages/plan theo template, verify AI thật OK |
 | TS-F7 | Test Strategy UI + table `test_strategies` | ✅ Code done | Panel inline tại project node; CHƯA click-test UI browser |
-| TS-F8 | Stage progress tracking (dashboard %/status) | 📋 Planned | Cần F3 (Lark→Tool status sync) trước |
-| TS-F9 | Release readiness auto-check (Go/No-go) | 📋 Planned | Dựa trên TS-F8 |
+| TS-F8 | Stage progress tracking (dashboard %/status) | 🟡 Code done | Tab "Release Check" (`getReleaseCheck` + UI). % tính từ `test_cases.status`+`stage`. Cần F3 + gán stage cho TC để có data thật |
+| TS-F9 | Release readiness auto-check (Go/No-go) | 🟡 Code done | Badge Go/No-go trong release-check. Cần status TC thật (F3) mới có ý nghĩa |
+| SYS | System Layer (bảng `systems` + sidebar phân cấp System→Project) | ✅ Code done | `/api/systems` CRUD; `projects.system_id`; CHƯA click-test UI |
+| SG | Skill Gating theo Test Plan (`utils/skill-gating.js`) | ✅ Code done | Ẩn/hiện skill theo stage bật trong plan; plan chưa cấu hình → hiện đủ (backward-compat) |
+| TP | Test Plan (tái dùng `test_strategies`) + wizard tạo project | ✅ Code done | `CreateProjectModal` 3 bước; status `configured`; StrategyPanel 2 tab; CHƯA click-test UI |
 
 ### Known Issues
 | # | Mô tả | File | Workaround |
@@ -557,6 +621,8 @@ OutputPanel không render nổi → bug "[object Object]".
 | 5 | ~~AI SRS thỉnh thoảng hỏi thêm ở vòng chốt~~ → **Đã đổi thành hành vi CÓ CHỦ ĐÍCH (2026-07-08)**: AI được phép hỏi tiếp qua nhiều vòng nếu câu trả lời vẫn còn thiếu sót business-critical, cho tới khi hết khúc mắc | skill-registry.js (system prompt SRS + buildFinalizePrompt) | Không còn là issue — là thiết kế. `[GIẢ ĐỊNH]` chỉ dùng cho chi tiết cosmetic |
 | 6 | `parseClarificationQuestions` vẫn có thể miss nếu AI dùng định dạng hộp câu hỏi khác hẳn 3 dạng đã test (`> **[...]**`, `**[...]**`, `# [...]`) | srs-clarification.js | Regex đã lenient nhưng không bao quát 100% — nếu gặp case mới cần bổ sung thêm biến thể vào regex |
 | 7 | Nút "+ Thêm feature" thủ công trên TreeNode (sidebar) vẫn gợi ý next-type theo hierarchy cứng module→screen→feature (`NEXT_TYPE` trong TreeNode.jsx) — không tự nhận biết trường hợp user tạo feature trực tiếp dưới module (bỏ qua screen) như nút "Phân rã thành Feature" hỗ trợ | TreeNode.jsx | Không ảnh hưởng — user vẫn tạo thủ công bình thường, chỉ là gợi ý mặc định chưa khớp 100% mọi cách tổ chức cây |
+| 8 | Test case sinh ra CHƯA tự gán cột `test_cases.stage` (api/smoke/manual/...) → tab "Release Check" gom TC theo stage nên các TC chưa gán stage không được tính (báo `unassignedCount`) | test-case gen / TestCaseTable.jsx | Cần thêm UI/logic gán stage cho TC (lúc gen hoặc trong bảng TC). Hiện Release Check chủ yếu 'pending' cho tới khi có TC gán stage + status thật (F3) |
+| 9 | Release Check phụ thuộc `test_cases.status` (Pass/Fail/Block) — hiện phần lớn TC status rỗng nên %/Go-No-go thường thấp/'pending' | strategy.service.js#getReleaseCheck | ĐÚNG thiết kế, không phải bug. Cần F3 (Lark→Tool status sync) để có status thật |
 
 ---
 
@@ -574,3 +640,4 @@ OutputPanel không render nổi → bug "[object Object]".
 | 2026-07-07 | Fix `projectTree.refreshTree is not a function` — hook `useProjectTree()` định nghĩa `refreshTree()` và dùng nội bộ (createNode/renameNode/deleteNode/importNodes) nhưng quên liệt kê trong object trả về, nên bên ngoài hook (ví dụ `main.jsx#decomposeSrs()`) gọi `projectTree.refreshTree()` luôn bị `undefined`. Bug có sẵn từ trước, chỉ lộ ra hôm nay khi user lần đầu bấm trót lọt tới bước cuối của "Phân rã thành Feature" trên UI thật | useProjectTree.js | ✅ Build pass; đối chiếu đủ 10 usage `projectTree.*` trong main.jsx với object trả về của hook, không còn field nào khác bị thiếu tương tự — CHƯA re-verify qua UI thật sau fix |
 | 2026-07-08 | Sửa hành vi hỏi làm rõ SRS: cho phép hỏi NHIỀU VÒNG khi câu trả lời vẫn còn thiếu business-critical (trước đó bị ép chốt sau đúng 1 vòng); `[GIẢ ĐỊNH]` chỉ dùng cho cosmetic. Sửa system prompt SRS + buildFinalizePrompt + toast | skill-registry.js, main.jsx | ✅ Build pass, verify tầng prompt; chưa test nhiều vòng qua UI |
 | 2026-07-08 | **Feature MỚI: Test Strategy (TS-F6+F7)** — skill `teststrategy` (JSON stages/plan theo 4 template, 2 trục stage), table `test_strategies` + service + routes `/api/strategies`, `StrategyPanel.jsx` inline tại project node (Generate→Review→Approve→Current), ẩn skill khỏi sidebar. Project node giờ CHỈ hiện màn Test Strategy (ẩn SkillSidebar + Requirement/Output). Xem FLOW 7 | schema.sql, strategy.service.js (mới), strategy.routes.js (mới), app.js, strategy-templates.js (mới), skill-registry.js, SkillSidebar.jsx, strategy.api.js (mới), StrategyPanel.jsx (mới), main.jsx | ✅ Build pass; verify schema in-memory + HTTP CRUD end-to-end (port tạm) + gọi AI Gemini thật ra JSON đúng schema. **CHƯA click-test UI browser**. Root cause user báo "gen không chạy" = backend cũ chưa restart (route 404) |
+| 2026-07-08 | **Nâng cấp: System Layer + Test Plan + Skill Gating** (GỘP vào Test Strategy, không tạo bản song song) — bảng `systems` + `/api/systems` + sidebar phân cấp **System→Project→Module→Screen→Feature**; cột `projects.system_id` + `test_cases.stage`; **skill-gating** (`utils/skill-gating.js` + 5 template mới + ALWAYS_ON + applicable_nodes trong `strategy-templates.js`); **Test Plan tái dùng bảng `test_strategies`** (status `configured` + `getReleaseCheck` + `GET /api/strategies/release-check`); `CreateProjectModal` wizard 3 bước; `StrategyPanel` → **2 tab** (Kế hoạch test + Release Check); gating + banner cảnh báo trong main.jsx; badge sidebar gọn (mã ngắn ✓NEW/…). Xem FLOW 8. Commit `28c9063` | systems.service/routes (mới), strategy.service/routes, node/project.service, nodes.routes, schema.sql, db_manager, app.js, strategy-templates, skill-gating.js (mới), systems.api.js (mới), CreateProjectModal.jsx (mới), StrategyPanel, ProjectSidebar, SkillSidebar, TreeNode, useProjectTree, strategy.api, main.jsx | ✅ Build (70 modules) + in-memory tests (schema/gating 11/release-check 13/step4 8, verbatim SQL) + **E2E service THẬT trên DB THẬT** (migrations + round-trip 11 assert + cleanup sạch) + restart & probe live (/api/systems 200, release-check 400). **CHƯA click-test UI browser** |

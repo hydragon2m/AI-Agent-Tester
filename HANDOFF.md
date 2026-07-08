@@ -5,7 +5,86 @@
 
 ---
 
-## Session gần nhất: 2026-07-08 (máy Windows) — Fix vòng hỏi SRS (cho phép hỏi nhiều vòng) + Build feature MỚI: Test Strategy (F6+F7)
+## Session gần nhất: 2026-07-08 (máy Windows, phiên nâng cấp) — System Layer + Test Plan + Skill Gating (kế thừa & gộp vào Test Strategy)
+
+User đưa 1 implementation plan lớn ("System Layer + Test Strategy + Skill Gating", 8 bước). Sau khi đối chiếu plan với code thật, phát hiện plan **xung đột trực tiếp** với feature Test Strategy vừa build phiên trước (đè cùng slot project node, tạo file/bảng song song). User chốt hướng **"gộp/kế thừa vào bản cũ"** (không tạo bản song song) và làm **từng bước, báo cáo sau mỗi bước**. Đã hoàn thành cả 8 bước, verify backend end-to-end, restart server, và commit `28c9063`.
+
+### 1. Task đã hoàn thành (8 bước)
+- **Tầng System mới** (cấp ngoài cùng cây): bảng `systems` + `systems.service.js` + `systems.routes.js` mount `/api/systems` (CRUD). `getSystemById` trả kèm danh sách project + template/status (lấy từ `test_strategies` mới nhất).
+- **Schema**: thêm bảng `systems`; cột `projects.system_id` (nullable); cột `test_cases.stage`. Migration qua `ensureColumn` cho DB cũ (đã chạy thật trên DB thật — xem mục 5).
+- **Skill Gating**: mở rộng `features/skills/strategy-templates.js` (KHÔNG tạo file `config/` thứ 2) — đổi sang **5 template** `new_feature / feature_addition / hotfix / new_version / full_product` (bỏ `new_product`/`custom`), thêm `STAGE_ACTIVITIES[].skillIds`, `ALWAYS_ON_SKILLS` (srs, buganalyzer), `INTERNAL_SKILLS`, `SKILL_APPLICABLE_NODES`, `templateShort()`. Thêm `utils/skill-gating.js`: `getVisibleSkillIds(nodeType, plan)` + `previewVisibleSkillIds(nodeType, templateId, draftStages)`.
+- **Test Plan tái dùng bảng `test_strategies`** (KHÔNG tạo `test_plans`): thêm status `'configured'` được `createStrategy` chấp nhận; thêm `getReleaseCheck(projectId)` + route `GET /api/strategies/release-check?projectId=` (tính %/pass/fail/block, blockers, Go/No-go theo `test_cases.stage`). KHÔNG tạo route family `/api/test-plans` — mở rộng `/api/strategies` sẵn có.
+- **Tạo project + gán system_id**: mở rộng `POST /tree` nhận `systemId` (chỉ áp dụng node project) → lưu `projects.system_id`; `getNodes` LEFT JOIN + subquery lộ `system_id` + `plan_template`/`plan_status` (cho badge sidebar). `useProjectTree.createNode(parentId, type, systemId)`.
+- **ProjectSidebar phân cấp** System → Project → Module → Screen → Feature: nhóm project theo `systemId` (systems fetch nội bộ sidebar); nút **+ System**, mỗi system có **+P** (tạo project) / ✎ / ×; nhóm "Chưa gán hệ thống" cho project cũ. Badge Test Plan trên node project (`✓<mã>` xanh / `Draft` vàng).
+- **CreateProjectModal** (mới): wizard 3 bước (tên → chọn template → toggle stage + **preview skill cho Screen**) → tạo project node (systemId) + test plan (`status='configured'`).
+- **StrategyPanel → 2 tab** (evolve tại chỗ, KHÔNG tạo TestPlanPanel): tab **"Kế hoạch test"** (giữ luồng generate/review/current cũ + thêm **✎ Chỉnh stage** toggle-lưu tại chỗ, không cần AI) + tab **"Release Check"** (%/stage + blockers + badge Go/No-go, nút Làm mới).
+- **main.jsx**: gating khi chọn node (fetch plan của project → lọc skill trong SkillSidebar, tự nhảy skill khác nếu skill đang chọn bị ẩn); **banner vàng** cảnh báo "chưa có plan" + nút "Tạo kế hoạch test →"; mở CreateProjectModal từ +P; `onPlanChanged` → refreshTree đồng bộ badge.
+- **Fix badge che tên** (user báo qua ảnh): badge configured trước in nguyên nhãn template dài ("✓ Sản phẩm mới hoàn toàn") → che hết tên project. Đổi thành mã ngắn `✓NEW/ADD/FIX/VER/FULL` (nhãn đầy đủ ở tooltip).
+
+### 2. File đã sửa / tạo mới
+- **Backend mới**: `src/server/services/systems.service.js`, `src/server/routes/systems.routes.js`.
+- **Backend sửa**: `db/schema.sql` (systems + 2 cột), `db/db_manager.js` (2 ensureColumn), `app.js` (mount /api/systems), `services/node.service.js` (createNode+systemId, getNodes JOIN+subquery), `services/project.service.js` (createProject+systemId), `routes/nodes.routes.js` (systemId in/out), `services/strategy.service.js` (status configured + getReleaseCheck), `routes/strategy.routes.js` (route release-check).
+- **Frontend mới**: `src/web/utils/skill-gating.js`, `src/web/backend-api/systems.api.js`, `src/web/components/strategy/CreateProjectModal.jsx`. (Ghi chú: `strategy.service.js`, `strategy.routes.js`, `strategy.api.js`, `components/strategy/StrategyPanel.jsx`, `features/skills/strategy-templates.js` là của phiên trước, giờ mới được commit lần đầu trong `28c9063`.)
+- **Frontend sửa**: `features/skills/strategy-templates.js` (5 template + gating config + templateShort), `features/skills/skill-registry.js` (fallback getTemplate('custom')→'feature_addition'), `backend-api/strategy.api.js` (+fetchReleaseCheckApi), `state/useProjectTree.js` (createNode+systemId), `components/layout/ProjectSidebar.jsx` (phân cấp System), `components/layout/SkillSidebar.jsx` (visibleSkillIds), `components/tree/TreeNode.jsx` (PlanBadge), `components/strategy/StrategyPanel.jsx` (2 tab), `main.jsx` (gating + banner + wizard + sync).
+
+### 3. Quyết định quan trọng (hướng "gộp", khác plan gốc)
+- **Test Plan = tái dùng bảng `test_strategies`**, KHÔNG tạo `test_plans`. Xác nhận qua code: tạo project node → `nodes.project_id = id` VÀ `createProject(id)` → `projects.id === nodes.id === test_strategies.project_id` (1:1). Nên `system_id` gắn ở bảng `projects` là hợp lệ.
+- **Không tạo route `/api/test-plans/*`** — get/create/update plan dùng `/api/strategies` sẵn có, chỉ thêm `release-check`.
+- **Bỏ endpoint backend `.../skills?node_type=`** trong plan gốc — gating tính **phía frontend** (phản ứng tức thì khi toggle, đúng yêu cầu "không reload"). `strategy-templates.js` giữ thuần ESM (không cần dual CJS/ESM).
+- **Gộp vào `features/skills/strategy-templates.js`**, KHÔNG tạo `config/strategy-templates.js` thứ 2 (tránh 2 file cùng tên, key lệch).
+- **Xóa System KHÔNG xóa project** — chỉ `system_id = NULL` (về nhóm "Chưa gán").
+- **StrategyPanel evolve tại chỗ thành 2 tab**, KHÔNG tạo `TestPlanPanel` song song (tôn trọng điều cấm phiên trước + rule "không rewrite code đang chạy").
+- Badge sidebar chỉ hiện mã ngắn + tooltip (không in nhãn template dài).
+
+### 4. Lỗi còn lại / chưa hoàn tất
+- **CHƯA click-test toàn bộ luồng qua UI browser thật** (tạo System → +P wizard 3 bước → badge → chọn Screen thấy gating + banner → tab Release Check). Backend đã e2e + probe live; frontend mới build + esbuild compile. **Đây là việc quan trọng nhất còn lại** — user đang tự test. Bài học dự án: **build pass ≠ chạy đúng UI**.
+- **Release Check phụ thuộc `test_cases.status`** (Pass/Fail/Block). Hiện phần lớn TC chưa có status thật (cần F3 Lark→Tool sync) → % thấp / Go-No-go 'pending' là **đúng thiết kế**, không phải bug. TC chưa gán `stage` sẽ không tính vào tiến độ (có cảnh báo unassignedCount).
+- Nút "+ Thêm feature" trên TreeNode vẫn theo hierarchy cứng (issue #7 cũ, chưa đụng).
+
+### 5. Test đã chạy
+- `npm run build` (Vite) — PASS qua từng bước, cuối cùng **70 modules**.
+- `node --check` toàn bộ file backend đã sửa/mới — PASS.
+- **In-memory (better-sqlite3) trên schema thật, verbatim SQL** (không đụng DB thật): schema Step1 (systems/system_id/stage + round-trip + delete-system giữ project); skill-gating **11 assertion** (esbuild bundle → không circular); release-check **13 assertion** (4 scenario); createNode/getNodes Step4 **8 assertion**.
+- **E2E service THẬT trên DB THẬT** (`node` gọi thẳng service): `initDatabase()` chạy migration thật (đã thêm `projects.system_id`, `test_cases.stage`, bảng `systems` vào `~/.hydra-qa/database.sqlite`); round-trip 11 assertion (system→project systemId→tree lộ plan→strategy configured→systems enrich→release-check math); **cleanup sạch** (sys=0 node=0 tc=0 projRow=0).
+- **Restart server + probe live**: kill backend cũ (bản 404) + frontend cũ; `npm start` + `npm run dev` (chạy nền); probe `GET /api/systems` → **200 []**, `GET /api/strategies/release-check` (thiếu param) → **400**, port 5173 LISTEN.
+- File test tạm nằm trong scratchpad (ngoài repo), KHÔNG commit.
+
+### 6. Lệnh cần chạy lại (Windows) — server ĐANG CHẠY
+```powershell
+cd d:\HANH_TEST_AI\AI-Agent-Tester
+# Backend + frontend đã được restart bản MỚI cuối session này (chạy nền). DB đã migrate sẵn.
+# Nếu cần khởi động lại:
+netstat -ano | findstr :3001
+# Probe xác nhận bản mới: /api/systems phải 200; /api/strategies/release-check (thiếu param) phải 400.
+npm start        # backend Express -> http://localhost:3001
+npm run dev      # frontend Vite   -> http://localhost:5173
+# Hard refresh Ctrl+Shift+R để nạp frontend mới.
+```
+> DB thật đã được migrate trong session này (qua script e2e gọi initDatabase) → lần `npm start` sau là no-op cho migration.
+
+### 7. Task tiếp theo được khuyến nghị
+- **User click-test toàn bộ luồng UI thật** (mục 4) — bước duy nhất chưa verify.
+- **F3 — Lark → Tool status sync**: cần để Release Check có status TC thật (Pass/Fail) và % có ý nghĩa. Đây là mảnh còn thiếu để TS-F8/F9 (giờ đã có code) chạy với data thật.
+- Cân nhắc cho **gán stage cho từng TC** (cột `test_cases.stage` đã có nhưng chưa có UI gán) — hiện TC gen ra chưa tự set stage → Release Check chưa gom được. Cần UI/logic set stage khi gen hoặc trong TestCaseTable.
+- Cân nhắc cho **đổi system của project** (move giữa các system) — hiện chỉ gán lúc tạo.
+- Cập nhật docs bàn giao (đang làm ở cuối session này).
+
+### 8. Điều KHÔNG được làm ở session sau
+- KHÔNG tạo bảng `test_plans` hay route family `/api/test-plans` — Test Plan tái dùng `test_strategies` + `/api/strategies` (+ release-check). 
+- KHÔNG tạo `config/strategy-templates.js` thứ 2 — chỉ có 1 file ở `features/skills/strategy-templates.js` (5 template: new_feature/feature_addition/hotfix/new_version/full_product; đã bỏ `new_product`/`custom`).
+- KHÔNG đổi 5 template key / 6 activity key / 5 stageType mà không sync đồng thời: `strategy-templates.js`, prompt `teststrategy` trong `skill-registry.js`, `normalizeStages`, `templateShort`, và bản đồ skillIds.
+- KHÔNG bỏ filter internal trong `SkillSidebar.jsx` (`key !== 'srsdecomposer' && key !== 'teststrategy'`) — gating (`visibleSkillIds`) chồng THÊM lên chứ không thay thế filter đó.
+- KHÔNG in nguyên nhãn template dài vào badge sidebar (che tên) — dùng `templateShort()`, nhãn đầy đủ để ở tooltip.
+- KHÔNG nhét `system_id` vào bảng `nodes` — nó nằm ở bảng `projects` (project node id === projects.id). Tree lộ ra qua LEFT JOIN trong `getNodes`.
+- KHÔNG để `createStrategy` ép status về draft — phải chấp nhận `'configured'` (gating dựa vào status configured/approved).
+- KHÔNG tạo `TestPlanPanel` song song — Test Plan sống trong `StrategyPanel` (2 tab).
+- Xóa System KHÔNG được xóa project bên trong (chỉ null `system_id`).
+- KHÔNG kết luận route lỗi khi chưa probe: `/api/systems` 200 & `/api/strategies/release-check` (thiếu param) 400 = backend mới; 404 = backend cũ chưa restart.
+- Giữ nguyên mọi điều cấm các phiên trước (teststrategy/srsdecomposer ẩn khỏi sidebar, không hạ maxOutputTokens nhánh expectJson, refreshTree phải export, parseClarificationQuestions dùng chung, Phân rã Feature thủ công...).
+
+---
+
+## Session trước: 2026-07-08 (máy Windows) — Fix vòng hỏi SRS (cho phép hỏi nhiều vòng) + Build feature MỚI: Test Strategy (F6+F7)
 
 Session gồm 2 mảng chính: (A) chỉnh lại hành vi hỏi làm rõ của skill SRS theo phản hồi user; (B) build tính năng mới **Test Strategy Generator** (F6 skill + F7 UI/table) gắn tại project node theo đúng sơ đồ thiết kế user cung cấp, rồi sửa UI để project node CHỈ hiện màn Test Strategy và xác định nguyên nhân user báo "gen strategy không chạy".
 
