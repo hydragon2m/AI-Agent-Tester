@@ -70,11 +70,13 @@ jobs:
         run: npm ci
 
       - name: Create binaries directory
+        shell: bash
         run: mkdir -p src-tauri/binaries
 
       # Dùng @yao-pkg/pkg để compile Node.js server thành file binary độc lập.
       # Người dùng cuối KHÔNG cần cài Node.js.
       - name: Bundle server into standalone binary
+        shell: bash
         run: |
           npx pkg src/server/app.js \
             --target ${{ matrix.pkg_target }} \
@@ -84,6 +86,7 @@ jobs:
             --public-packages "*"
 
       - name: Verify server binary exists
+        shell: bash
         run: |
           ls -lh src-tauri/binaries/
 
