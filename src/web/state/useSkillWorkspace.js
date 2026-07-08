@@ -13,6 +13,7 @@ export function useSkillWorkspace() {
     language: 'typescript',
     domain: '',
     detailLevel: 'full',
+    autoAudit: false, // mặc định KHÔNG tự đánh giá chất lượng TC (tiết kiệm token) — user tự bấm/tick
   });
 
   const input = inputs[activeSkill] || '';

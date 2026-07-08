@@ -5,6 +5,7 @@ import {
   stageTypeLabel,
   activityLabel,
   normalizeStages,
+  generateDefaultStrategy,
 } from '../../features/skills/strategy-templates';
 import {
   createStrategyApi,
@@ -63,6 +64,15 @@ export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode,
     } finally {
       setGenerating(false);
     }
+  }
+
+  // Sinh bằng CODE — tức thời, 0 token, không gọi AI. Nạp thẳng cấu hình chuẩn theo template.
+  function handleGenerateCode() {
+    const strat = generateDefaultStrategy(template, projectNode?.name, note);
+    setDraft(strat);
+    setStages(normalizeStages(strat.stages, template));
+    setView('review');
+    onToast?.('Đã sinh Test Strategy chuẩn bằng code (0 token) — xem lại & Approve');
   }
 
   function toggleStage(key) {
@@ -138,6 +148,7 @@ export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode,
               setNote={setNote}
               generating={generating}
               onGenerate={handleGenerate}
+              onGenerateCode={handleGenerateCode}
               hasExisting={!!existing}
               onBack={existing ? () => setView('current') : null}
               demoMode={demoMode}
@@ -198,12 +209,12 @@ function TabBar({ tab, setTab }) {
   );
 }
 
-function GenerateView({ template, setTemplate, note, setNote, generating, onGenerate, hasExisting, onBack, demoMode }) {
+function GenerateView({ template, setTemplate, note, setNote, generating, onGenerate, onGenerateCode, hasExisting, onBack, demoMode }) {
   return (
     <>
       <p className="pf-hint" style={{ marginTop: 0 }}>
-        Chọn loại project — tool sẽ đề xuất các stage test theo thứ tự, điều kiện vào/ra và điều kiện release.
-        {demoMode ? ' (Đang ở Demo mode — kết quả là mẫu.)' : ''}
+        Chọn loại project → <strong>Sinh bằng Code</strong> (nhanh, 0 token) để lấy cấu hình chuẩn, hoặc <strong>Sinh bằng AI</strong> để AI phân tích ngữ cảnh dự án.
+        {demoMode ? ' (Đang ở Demo mode — kết quả AI là mẫu.)' : ''}
       </p>
       <div className="pf-field">
         <label className="pf-label">Loại project (template)</label>
@@ -244,8 +255,11 @@ function GenerateView({ template, setTemplate, note, setNote, generating, onGene
       </div>
       <div className="modal-actions">
         {onBack && <button className="btn-secondary" onClick={onBack} disabled={generating}>Quay lại</button>}
-        <button className="btn-primary" onClick={onGenerate} disabled={generating}>
-          {generating ? 'Đang sinh...' : (hasExisting ? 'Sinh lại chiến lược' : 'Sinh Test Strategy')}
+        <button className="btn-secondary" onClick={onGenerateCode} disabled={generating} title="Lấy cấu hình chuẩn theo template — tức thời, không tốn token">
+          ⚡ Sinh bằng Code (0 token)
+        </button>
+        <button className="btn-primary" onClick={onGenerate} disabled={generating} title="AI phân tích ngữ cảnh dự án để sinh chiến lược tùy chỉnh">
+          {generating ? 'Đang sinh...' : '🤖 Sinh bằng AI'}
         </button>
       </div>
     </>

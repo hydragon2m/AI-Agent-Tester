@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   STRATEGY_TEMPLATES,
   buildDefaultStages,
+  generateDefaultStrategy,
   getTemplate,
 } from '../../features/skills/strategy-templates';
 import { previewVisibleSkillIds } from '../../utils/skill-gating';
@@ -40,14 +41,17 @@ export function CreateProjectModal({ systemId, systemName, onClose, onCreated, o
         parentId: null, type: 'project',
         name: name.trim(), context: context.trim(), systemId: systemId || null,
       });
+      // Sinh Test Strategy đầy đủ bằng CODE (0 token) theo template + toggle của user →
+      // mở project ra là có sẵn plan chi tiết (summary/executionPlan/releaseGate), status configured.
+      const strat = generateDefaultStrategy(template, name.trim(), context, stages);
       await createStrategyApi({
         projectId: project.id,
         nodeId: project.id,
         template,
-        summary: '',
-        stages,
-        executionPlan: null,
-        releaseGate: '',
+        summary: strat.summary,
+        stages: strat.stages,
+        executionPlan: strat.executionPlan,
+        releaseGate: strat.releaseGate,
         status: 'configured',
       });
       onToast?.(`✅ Đã tạo project "${project.name}" + test plan`);

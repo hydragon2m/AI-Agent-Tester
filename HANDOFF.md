@@ -5,7 +5,81 @@
 
 ---
 
-## Session gần nhất: 2026-07-08 (máy Windows, phiên nâng cấp) — System Layer + Test Plan + Skill Gating (kế thừa & gộp vào Test Strategy)
+## Session gần nhất: 2026-07-08 (máy Windows, phiên tối ưu & UI) — Tối ưu token + Tinh giản UI + Cột TC (M/S/F+Status) + Kéo rộng cột
+
+Nối tiếp phiên System Layer/Test Plan (bên dưới). Trong phiên user báo lỗi **`QUOTA_EXCEEDED`** khi test → chẩn đoán = Gemini free-tier hết hạn mức (KHÔNG phải bug, chỉ có Gemini có key nên không fallback). Từ đó user yêu cầu loạt cải tiến tối ưu token + tinh chỉnh UI/bảng TC. Tất cả đã build + test logic; **CHƯA click-test UI thật** (user tự test).
+
+### 1. Task đã hoàn thành
+- **(A) Tối ưu token — Test Strategy sinh bằng CODE (0 token)**: `strategy-templates.js` thêm `STAGE_DETAILS` (chi tiết chuẩn 6 activity: stageType/trigger/skills/entry/exit/owner/sprint, dùng chung mọi template) → `buildDefaultStages` giờ trả chi tiết đầy đủ (hết rỗng); thêm `generateDefaultStrategy(template, projectName, note, stagesOverride?)` dựng full strategy (summary+stages+executionPlan+releaseGate) bằng code. `CreateProjectModal` khi tạo project tự lưu plan chi tiết bằng code (status `configured`). `StrategyPanel` màn generate có **2 nút**: "⚡ Sinh bằng Code (0 token)" (tức thời→Review) + "🤖 Sinh bằng AI".
+- **(B) Tối ưu token — Auto quality-audit thành TÙY CHỌN**: `useSkillWorkspace` thêm `autoAudit:false` mặc định; `SkillOptions` (skill testcase) thêm checkbox "Tự động đánh giá chất lượng (tốn thêm token)"; `main.jsx#generate()` chỉ gọi `runQualityCheck` khi `options.autoAudit===true`. Mặc định gen TC chỉ **1 lượt AI** thay vì 2 (~50% token); nút "Đánh giá chất lượng" thủ công ở Output vẫn còn.
+- **(C) Tinh giản UI (chỉ `index.css`, KHÔNG đổi cấu trúc)**: `:root` đổi sang palette phẳng (giữ nguyên TÊN biến — bg-dark #08080c, bg-card #111117, text-primary #f8fafc...); `--shadow-glow: none`, `--radius` 12→8, `--border` mảnh 0.05; 2 nút gradient (`btn-primary`/`btn-generate`) → solid `--primary`, bỏ hover "bay lên"; `.tc-card:hover` bỏ transform; scrollbar 6→5px màu tiệp; `.bg-grid` opacity 0.4. Giữ font Inter (Plus Jakarta chưa import). Orbs không được React render nên không đụng.
+- **(D) Bảng TC — cột Module/Screen/Feature + Status gần cuối + hover xem full**: `TestCaseTable` thêm cột **Screen, Feature** (read-only, lấy từ cây node) sau Module + **Status** (dropdown, gần cuối trước nút Xóa); thêm `title` (hover tooltip full nội dung) cho Module/Name/Preconditions/Steps/Expected. `main.jsx` tính `nodePathInfo{module,screen,feature}` từ `activePath` → truyền qua `OutputPanel` → bảng. Export **CSV** (`toCsv`) thêm cột Screen/Feature + điền Status/Actual/RelatedBug (Status gần cuối); **Copy Lark** (`toLarkClipboardPayload`) điền giá trị Status; **Push Lark** (`lark.service.js buildRequiredFieldDefs`) chuyển field Status xuống gần cuối (trước Related Bug).
+- **(E) Kéo chỉnh độ rộng cột bảng TC**: `TestCaseTable` dùng `table-layout: fixed` + độ rộng cột lưu trong state (`COLUMNS`/`colWidths`); mỗi header (trừ Xóa) có handle kéo ở mép phải (min 60px), tổng rộng > khung → cuộn ngang. Thêm CSS `.col-resize-handle`.
+
+### 2. File đã sửa / tạo mới (không có file mới)
+- `src/web/features/skills/strategy-templates.js` — STAGE_DETAILS, buildDefaultStages đầy đủ, generateDefaultStrategy, templateShort (đã có từ phiên trước).
+- `src/web/components/strategy/CreateProjectModal.jsx` — dùng generateDefaultStrategy.
+- `src/web/components/strategy/StrategyPanel.jsx` — handleGenerateCode + nút "Sinh bằng Code".
+- `src/web/state/useSkillWorkspace.js` — autoAudit:false.
+- `src/web/components/controls/SkillOptions.jsx` — checkbox autoAudit.
+- `src/web/components/output/TestCaseTable.jsx` — cột M/S/F/Status, title tooltip, kéo rộng cột.
+- `src/web/components/output/OutputPanel.jsx` — nhận + truyền nodePath.
+- `src/web/features/testcase/testcase-export.js` — toCsv (Screen/Feature+status, đổi signature `(testCases, nodePath, larkMapping)`), toLarkClipboardPayload (điền status).
+- `src/server/services/lark.service.js` — Status field near end.
+- `src/web/main.jsx` — gate autoAudit, nodePathInfo, truyền nodePath, toCsv(...nodePathInfo...).
+- `src/web/index.css` — palette phẳng + hiệu ứng + .col-resize-handle.
+
+### 3. Quyết định quan trọng
+- **Test Strategy có 2 đường**: Code (0 token, cấu hình chuẩn theo template) và AI (như cũ). Wizard tạo project luôn dùng đường Code. Giữ cả 2.
+- **Auto-audit tắt mặc định** — quyết định tiết kiệm token; batch "Gen All TC" vốn đã không audit.
+- **CSS: chỉ đổi GIÁ TRỊ biến `:root` + hiệu ứng, KHÔNG đổi tên biến / cấu trúc** (component tham chiếu tên biến hiện có; đổi tên sẽ vỡ). Giữ Inter, giữ header 64px (tránh lệch layout).
+- **Screen/Feature là read-only lấy từ cây** (nguồn sự thật cho node); Module giữ editable (tc.module). Lark push dùng `nodePath.module || tc.module` (đã có sẵn).
+- **Lark Status-near-end chỉ áp dụng bảng TẠO MỚI** — bảng Lark đã tồn tại giữ nguyên thứ tự cột (Lark chỉ append field mới).
+- **QUOTA_EXCEEDED không phải bug** — Gemini free-tier hết hạn mức; cách né: bật Demo mode / dùng "Sinh bằng Code" / gen TC không auto-audit / đợi reset (~/phút hoặc /ngày) / đổi key ở Settings (đọc-live, không cần restart).
+
+### 4. Lỗi còn lại / chưa hoàn tất
+- **CHƯA click-test UI thật** toàn bộ (giao diện phẳng mới, wizard 0-token, "Sinh bằng Code", cột M/S/F/Status, hover tooltip, kéo rộng cột). Chỉ build + test logic. User đang tự test.
+- **Độ rộng cột reset khi reload** (lưu trong React state, chưa persist localStorage). Nếu muốn nhớ → thêm localStorage (như `useResizableWidth` của sidebar).
+- **Backend đang chạy CHƯA có thay đổi `lark.service.js`** (Status-order) — file này sửa SAU lần restart trong phiên. Cần restart `npm start` mới có hiệu lực khi push tạo bảng Lark mới.
+- **TC vẫn chưa auto-gán cột `stage`** (Known Issue #8 cũ) → Release Check chưa gom TC theo stage. Cần UI/logic gán stage khi gen.
+- Point #3 của plan CSS (line nối nhánh + indent sidebar) CHƯA làm — indent là `paddingLeft` inline trong TreeNode, dễ lệch, để lại chờ review.
+
+### 5. Test đã chạy
+- `npm run build` (Vite) — PASS qua từng bước (cuối ~284kb JS / 43kb CSS).
+- `node --check` `lark.service.js` — PASS.
+- **Logic tests (esbuild bundle module thật, chạy node)**: `generateDefaultStrategy`/`buildDefaultStages` 17 assertion (GENCODE_OK); `toCsv`/`toLarkClipboardPayload` 10 assertion — cột Screen/Feature, Status gần cuối, điền đúng giá trị, Module ưu tiên path + fallback (EXPORT_OK).
+- Lark push Status-order: chỉ đổi thứ tự mảng static + `node --check` (không e2e vì cần Lark creds thật).
+- File test tạm trong scratchpad (ngoài repo), KHÔNG commit.
+
+### 6. Lệnh cần chạy lại (Windows) — server ĐANG CHẠY (từ phiên trước)
+```powershell
+cd d:\HANH_TEST_AI\AI-Agent-Tester
+# Frontend (Vite) tự HMR các thay đổi web → chỉ hard-refresh Ctrl+Shift+R.
+# BACKEND cần restart để nạp thay đổi lark.service.js (Status-order) nếu định push Lark:
+netstat -ano | findstr :3001   # tìm PID, kill rồi:
+npm start        # backend -> http://localhost:3001
+npm run dev      # frontend -> http://localhost:5173
+```
+
+### 7. Task tiếp theo được khuyến nghị
+- User click-test toàn bộ UI (mục 4) — chưa verify browser.
+- Persist độ rộng cột TC vào localStorage nếu user muốn nhớ.
+- Auto-gán `stage` cho TC (khi gen / trong TestCaseTable) để Release Check có data — mảnh còn thiếu để TS-F8/F9 chạy thật (cùng với F3 Lark status sync).
+- Cân nhắc thêm provider fallback (Claude/OpenAI key) hoặc hướng dẫn quota để tránh QUOTA_EXCEEDED chặn đường khi hết Gemini.
+
+### 8. Điều KHÔNG được làm ở session sau
+- KHÔNG bật lại auto-audit mặc định — giữ `options.autoAudit=false` (tiết kiệm token, user tự tick/bấm).
+- KHÔNG bỏ nút "Sinh bằng Code" / `generateDefaultStrategy` — đó là đường tạo strategy 0-token chính (wizard cũng dùng).
+- Khi đổi 5 template / 6 activity: phải sync ĐỒNG THỜI `STAGE_DETAILS`, `generateDefaultStrategy`, `buildDefaultStages`, `normalizeStages`, prompt teststrategy, `templateShort`, skillIds.
+- KHÔNG đổi TÊN biến trong `:root` (chỉ đổi giá trị) — component tham chiếu tên biến hiện tại; đổi tên = vỡ theme.
+- Giữ **Status gần cuối** + cột **Screen/Feature** ở CSV/Copy-Lark/Push-Lark; header CSV phải khớp số cột với row (17 cột).
+- `toCsv` signature giờ là `(testCases, nodePath, larkMapping)` — đừng gọi thiếu `nodePath` (sẽ mất Module/Screen/Feature).
+- Bảng TC dùng `table-layout: fixed` + `COLUMNS`/`colWidths` — thêm/bớt cột phải cập nhật `COLUMNS` (header) VÀ `<td>` trong tbody ĐÚNG THỨ TỰ, nếu không lệch cột.
+- Giữ nguyên mọi điều cấm các phiên trước (System/Test Plan: không tạo test_plans/route song song, không bỏ filter internal SkillSidebar, system_id ở bảng projects, createStrategy nhận 'configured', v.v.).
+
+---
+
+## Session trước: 2026-07-08 (máy Windows, phiên nâng cấp) — System Layer + Test Plan + Skill Gating (kế thừa & gộp vào Test Strategy)
 
 User đưa 1 implementation plan lớn ("System Layer + Test Strategy + Skill Gating", 8 bước). Sau khi đối chiếu plan với code thật, phát hiện plan **xung đột trực tiếp** với feature Test Strategy vừa build phiên trước (đè cùng slot project node, tạo file/bảng song song). User chốt hướng **"gộp/kế thừa vào bản cũ"** (không tạo bản song song) và làm **từng bước, báo cáo sau mỗi bước**. Đã hoàn thành cả 8 bước, verify backend end-to-end, restart server, và commit `28c9063`.
 

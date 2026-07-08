@@ -140,9 +140,10 @@ function selectOptions(names) {
 }
 
 // Server-configured field set for the Test Cases table. Order here is what a
-// brand-new table gets created with (ID/Screen/Module/Feature/Title first,
-// then the rest); fields added later to an already-existing table via
-// reconcileFields always get appended by Lark regardless of this order.
+// brand-new table gets created with (ID/Screen/Module/Feature/Title first, then
+// Type/Priority, các cột nội dung, và Status ở gần cuối — trước Related Bug);
+// fields added later to an already-existing table via reconcileFields always get
+// appended by Lark regardless of this order (bảng cũ giữ nguyên thứ tự cột sẵn có).
 function buildRequiredFieldDefs(bugTableId) {
   return [
     { field_name: 'ID', type: 1 },
@@ -152,11 +153,11 @@ function buildRequiredFieldDefs(bugTableId) {
     { field_name: 'Title', type: 1 },
     { field_name: 'Type', type: 3, property: selectOptions(['Positive', 'Negative', 'Boundary', 'Edge Case', 'Security', 'UI/UX']) },
     { field_name: 'Priority', type: 3, property: selectOptions(['High', 'Medium', 'Low']) },
-    { field_name: 'Status', type: 3, property: selectOptions(['Pass', 'Fail', 'Pending', 'Block', 'Untest']) },
     { field_name: 'Preconditions', type: 1 },
     { field_name: 'Steps', type: 1 },
     { field_name: 'Expected Result', type: 1 },
     { field_name: 'Test Data', type: 1 },
+    { field_name: 'Status', type: 3, property: selectOptions(['Pass', 'Fail', 'Pending', 'Block', 'Untest']) },
     { field_name: 'Related Bug', type: 18, property: { table_id: bugTableId } }
   ];
 }

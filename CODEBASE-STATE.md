@@ -293,6 +293,11 @@ if (lastSrsRun) {
 
 ### FLOW 4 — Auto Audit TC sau khi gen (nối tiếp Flow 3)
 
+> ⚠️ **Cập nhật 2026-07-08: auto-audit giờ là TÙY CHỌN, mặc định TẮT** (tiết kiệm token).
+> Chỉ tự chạy khi user tick checkbox "Tự động đánh giá chất lượng" ở SkillOptions (skill
+> testcase) — `main.jsx#generate()` gate bằng `workspace.options.autoAudit`. Không tick →
+> gen TC xong dừng; user bấm nút "Đánh giá chất lượng" ở Output khi cần.
+
 ```
 ★ SAU KHI TC ĐƯỢC GEN XONG (Flow 3):
 
@@ -542,6 +547,11 @@ NODE PROJECT → StrategyPanel 2 tab:
 - Tạo `TestPlanPanel` song song — Test Plan sống trong `StrategyPanel` (2 tab).
 - In nhãn template dài vào badge (che tên) — dùng `templateShort()`.
 
+**Sinh Test Strategy 2 đường (2026-07-08):** màn generate có "⚡ Sinh bằng Code" (0 token,
+cấu hình chuẩn theo template — `generateDefaultStrategy` + `STAGE_DETAILS`) và "🤖 Sinh bằng
+AI" (skill teststrategy). Wizard tạo project LUÔN dùng đường Code (0 token). "✎ Chỉnh stage"
+ở tab Kế hoạch test cho toggle + lưu (`updateStrategyApi` status='configured') không cần AI.
+
 **CHƯA verify:** toàn bộ luồng UI click-test qua browser thật (backend đã e2e + probe
 live; frontend mới build + esbuild compile). **Còn thiếu để chạy thật đầy đủ**: (a) gán
 cột `stage` cho TC khi gen (chưa có), (b) F3 Lark→Tool status sync để Release Check có
@@ -623,6 +633,8 @@ status TC thật.
 | 7 | Nút "+ Thêm feature" thủ công trên TreeNode (sidebar) vẫn gợi ý next-type theo hierarchy cứng module→screen→feature (`NEXT_TYPE` trong TreeNode.jsx) — không tự nhận biết trường hợp user tạo feature trực tiếp dưới module (bỏ qua screen) như nút "Phân rã thành Feature" hỗ trợ | TreeNode.jsx | Không ảnh hưởng — user vẫn tạo thủ công bình thường, chỉ là gợi ý mặc định chưa khớp 100% mọi cách tổ chức cây |
 | 8 | Test case sinh ra CHƯA tự gán cột `test_cases.stage` (api/smoke/manual/...) → tab "Release Check" gom TC theo stage nên các TC chưa gán stage không được tính (báo `unassignedCount`) | test-case gen / TestCaseTable.jsx | Cần thêm UI/logic gán stage cho TC (lúc gen hoặc trong bảng TC). Hiện Release Check chủ yếu 'pending' cho tới khi có TC gán stage + status thật (F3) |
 | 9 | Release Check phụ thuộc `test_cases.status` (Pass/Fail/Block) — hiện phần lớn TC status rỗng nên %/Go-No-go thường thấp/'pending' | strategy.service.js#getReleaseCheck | ĐÚNG thiết kế, không phải bug. Cần F3 (Lark→Tool status sync) để có status thật |
+| 10 | Độ rộng cột bảng TC RESET khi reload trang (lưu trong React state, chưa persist) | TestCaseTable.jsx | Thêm localStorage (như `useResizableWidth` của sidebar) nếu cần nhớ |
+| 11 | `QUOTA_EXCEEDED` khi gen AI = Gemini free-tier hết hạn mức (chỉ có key Gemini → không fallback) — KHÔNG phải bug | gemini.provider.js / ai-router.service.js | Bật Demo mode / dùng "Sinh bằng Code" / gen TC không auto-audit / đợi reset / đổi key ở Settings (đọc-live). Cân nhắc thêm provider fallback |
 
 ---
 
@@ -641,3 +653,4 @@ status TC thật.
 | 2026-07-08 | Sửa hành vi hỏi làm rõ SRS: cho phép hỏi NHIỀU VÒNG khi câu trả lời vẫn còn thiếu business-critical (trước đó bị ép chốt sau đúng 1 vòng); `[GIẢ ĐỊNH]` chỉ dùng cho cosmetic. Sửa system prompt SRS + buildFinalizePrompt + toast | skill-registry.js, main.jsx | ✅ Build pass, verify tầng prompt; chưa test nhiều vòng qua UI |
 | 2026-07-08 | **Feature MỚI: Test Strategy (TS-F6+F7)** — skill `teststrategy` (JSON stages/plan theo 4 template, 2 trục stage), table `test_strategies` + service + routes `/api/strategies`, `StrategyPanel.jsx` inline tại project node (Generate→Review→Approve→Current), ẩn skill khỏi sidebar. Project node giờ CHỈ hiện màn Test Strategy (ẩn SkillSidebar + Requirement/Output). Xem FLOW 7 | schema.sql, strategy.service.js (mới), strategy.routes.js (mới), app.js, strategy-templates.js (mới), skill-registry.js, SkillSidebar.jsx, strategy.api.js (mới), StrategyPanel.jsx (mới), main.jsx | ✅ Build pass; verify schema in-memory + HTTP CRUD end-to-end (port tạm) + gọi AI Gemini thật ra JSON đúng schema. **CHƯA click-test UI browser**. Root cause user báo "gen không chạy" = backend cũ chưa restart (route 404) |
 | 2026-07-08 | **Nâng cấp: System Layer + Test Plan + Skill Gating** (GỘP vào Test Strategy, không tạo bản song song) — bảng `systems` + `/api/systems` + sidebar phân cấp **System→Project→Module→Screen→Feature**; cột `projects.system_id` + `test_cases.stage`; **skill-gating** (`utils/skill-gating.js` + 5 template mới + ALWAYS_ON + applicable_nodes trong `strategy-templates.js`); **Test Plan tái dùng bảng `test_strategies`** (status `configured` + `getReleaseCheck` + `GET /api/strategies/release-check`); `CreateProjectModal` wizard 3 bước; `StrategyPanel` → **2 tab** (Kế hoạch test + Release Check); gating + banner cảnh báo trong main.jsx; badge sidebar gọn (mã ngắn ✓NEW/…). Xem FLOW 8. Commit `28c9063` | systems.service/routes (mới), strategy.service/routes, node/project.service, nodes.routes, schema.sql, db_manager, app.js, strategy-templates, skill-gating.js (mới), systems.api.js (mới), CreateProjectModal.jsx (mới), StrategyPanel, ProjectSidebar, SkillSidebar, TreeNode, useProjectTree, strategy.api, main.jsx | ✅ Build (70 modules) + in-memory tests (schema/gating 11/release-check 13/step4 8, verbatim SQL) + **E2E service THẬT trên DB THẬT** (migrations + round-trip 11 assert + cleanup sạch) + restart & probe live (/api/systems 200, release-check 400). **CHƯA click-test UI browser** |
+| 2026-07-08 | **Tối ưu token + Tinh giản UI + Cột TC + Kéo rộng cột** — (A) Test Strategy sinh bằng CODE 0 token (`generateDefaultStrategy`+`STAGE_DETAILS`, nút "Sinh bằng Code" cạnh "Sinh bằng AI", wizard auto-fill plan chi tiết bằng code); (B) auto quality-audit → TÙY CHỌN (checkbox `autoAudit`, mặc định TẮT → gen TC 1 lượt AI thay vì 2); (C) tinh giản UI chỉ qua `index.css` (palette phẳng, bỏ glow/gradient/hover-lift, scrollbar mảnh — giữ tên biến); (D) bảng TC thêm cột Module/Screen/Feature + Status gần cuối + `title` hover xem full; CSV/Copy-Lark/Push-Lark có đủ cột + Status gần cuối; (E) kéo chỉnh độ rộng cột (table-layout fixed). Xem FLOW 3/4/8 | strategy-templates, CreateProjectModal, StrategyPanel, useSkillWorkspace, SkillOptions, TestCaseTable, OutputPanel, testcase-export, lark.service, main.jsx, index.css | ✅ Build pass + logic tests (gencode 17, export 10 assert). **CHƯA click-test UI browser**. Bối cảnh: user gặp QUOTA_EXCEEDED (Gemini hết hạn mức, không phải bug) → loạt tối ưu này |

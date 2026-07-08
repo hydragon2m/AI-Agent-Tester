@@ -1,10 +1,56 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 
 const TYPES = ['Positive', 'Negative', 'Boundary', 'Edge Case', 'Security', 'UI/UX'];
 const PRIORITIES = ['High', 'Medium', 'Low'];
 const SUITES = ['Smoke', 'Regression', 'New Feature', 'Exploratory'];
+const STATUSES = ['', 'Pass', 'Fail', 'Pending', 'Block', 'Untest'];
 
-export function TestCaseTable({ testCases, onUpdate }) {
+// Cột bảng TC (thứ tự khớp đúng với <td> trong tbody) + độ rộng mặc định (px).
+// `del` (nút Xóa) cố định, không cho kéo giãn.
+const COLUMNS = [
+  { key: 'id', label: 'TC ID', width: 80 },
+  { key: 'module', label: 'Module', width: 110 },
+  { key: 'screen', label: 'Screen', width: 110 },
+  { key: 'feature', label: 'Feature', width: 110 },
+  { key: 'name', label: 'Name', width: 200 },
+  { key: 'type', label: 'Type', width: 110 },
+  { key: 'priority', label: 'Priority', width: 100 },
+  { key: 'suite', label: 'Suite', width: 120 },
+  { key: 'preconditions', label: 'Preconditions', width: 180 },
+  { key: 'steps', label: 'Steps (Mỗi bước 1 dòng)', width: 240 },
+  { key: 'expected', label: 'Expected', width: 220 },
+  { key: 'status', label: 'Status', width: 110 },
+  { key: 'del', label: 'Xóa', width: 50, fixed: true },
+];
+const DEFAULT_COL_WIDTHS = Object.fromEntries(COLUMNS.map(c => [c.key, c.width]));
+
+// nodePath = { module, screen, feature } lấy từ cây (context của node đang chọn) — cùng
+// nguồn với dữ liệu đẩy lên Lark / export, hiển thị read-only để bảng "đầy đủ" cột.
+export function TestCaseTable({ testCases, onUpdate, nodePath = {} }) {
+  const [colWidths, setColWidths] = useState(DEFAULT_COL_WIDTHS);
+  const dragRef = useRef(null); // { key, startX, startW }
+
+  function startResize(e, key) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = { key, startX: e.clientX, startW: colWidths[key] };
+    const move = ev => {
+      const d = dragRef.current;
+      if (!d) return;
+      const next = Math.max(60, d.startW + (ev.clientX - d.startX));
+      setColWidths(prev => ({ ...prev, [d.key]: next }));
+    };
+    const up = () => {
+      dragRef.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
+
+  const tableWidth = COLUMNS.reduce((sum, c) => sum + (colWidths[c.key] || c.width), 0);
+
   if (!testCases) return <div className="empty-state table-empty">Chưa có test case cho node hiện tại.</div>;
 
   function handleCellChange(idx, field, value) {
@@ -37,7 +83,8 @@ export function TestCaseTable({ testCases, onUpdate }) {
       preconditions: '',
       steps: ['1. Bước đầu tiên'],
       testData: '',
-      expectedResult: 'Kết quả mong đợi'
+      expectedResult: 'Kết quả mong đợi',
+      status: ''
     };
     if (onUpdate) onUpdate([...testCases, newRow]);
   }
@@ -74,22 +121,34 @@ export function TestCaseTable({ testCases, onUpdate }) {
     cursor: 'pointer',
   };
 
+  // Cell context read-only (Module/Screen/Feature từ cây): hiện gọn + hover xem full.
+  const contextCellStyle = {
+    fontSize: '12px', color: 'var(--text-secondary, #94a3b8)',
+    display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  };
+
   return (
     <div className="tc-table-container">
       <div className="tc-table-wrapper">
-        <table className="tc-table">
+        <table className="tc-table" style={{ tableLayout: 'fixed', width: tableWidth }}>
           <thead>
             <tr>
-              <th style={{ width: '80px' }}>TC ID</th>
-              <th style={{ width: '100px' }}>Module</th>
-              <th>Name</th>
-              <th style={{ width: '110px' }}>Type</th>
-              <th style={{ width: '100px' }}>Priority</th>
-              <th style={{ width: '120px' }}>Suite</th>
-              <th>Preconditions</th>
-              <th>Steps (Mỗi bước 1 dòng)</th>
-              <th>Expected</th>
-              <th style={{ width: '50px', textAlign: 'center' }}>Xóa</th>
+              {COLUMNS.map(c => (
+                <th
+                  key={c.key}
+                  style={{ width: colWidths[c.key], position: 'relative', textAlign: c.key === 'del' ? 'center' : 'left' }}
+                >
+                  {c.label}
+                  {!c.fixed && (
+                    <span
+                      className="col-resize-handle"
+                      onMouseDown={e => startResize(e, c.key)}
+                      title="Kéo để chỉnh độ rộng cột"
+                      style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize' }}
+                    />
+                  )}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -104,15 +163,23 @@ export function TestCaseTable({ testCases, onUpdate }) {
                     style={inputStyle}
                     className="editable-cell-input"
                     value={tc.module || ''}
+                    title={tc.module || ''}
                     onChange={e => handleCellChange(idx, 'module', e.target.value)}
                     placeholder="Module..."
                   />
+                </td>
+                <td>
+                  <span style={contextCellStyle} title={nodePath.screen || '—'}>{nodePath.screen || '—'}</span>
+                </td>
+                <td>
+                  <span style={contextCellStyle} title={nodePath.feature || '—'}>{nodePath.feature || '—'}</span>
                 </td>
                 <td>
                   <textarea
                     style={{ ...textareaStyle, minHeight: '40px' }}
                     className="editable-cell-input"
                     value={tc.name || ''}
+                    title={tc.name || ''}
                     onChange={e => handleCellChange(idx, 'name', e.target.value)}
                     placeholder="Tên test case..."
                   />
@@ -149,6 +216,7 @@ export function TestCaseTable({ testCases, onUpdate }) {
                     style={{ ...textareaStyle, minHeight: '40px' }}
                     className="editable-cell-input"
                     value={tc.preconditions || ''}
+                    title={tc.preconditions || ''}
                     onChange={e => handleCellChange(idx, 'preconditions', e.target.value)}
                     placeholder="Điều kiện đầu..."
                   />
@@ -158,6 +226,7 @@ export function TestCaseTable({ testCases, onUpdate }) {
                     style={textareaStyle}
                     className="editable-cell-input"
                     value={Array.isArray(tc.steps) ? tc.steps.join('\n') : String(tc.steps || '')}
+                    title={Array.isArray(tc.steps) ? tc.steps.join('\n') : String(tc.steps || '')}
                     onChange={e => handleCellChange(idx, 'steps', e.target.value)}
                     placeholder="Các bước thực hiện..."
                   />
@@ -167,9 +236,20 @@ export function TestCaseTable({ testCases, onUpdate }) {
                     style={textareaStyle}
                     className="editable-cell-input"
                     value={tc.expectedResult || ''}
+                    title={tc.expectedResult || ''}
                     onChange={e => handleCellChange(idx, 'expectedResult', e.target.value)}
                     placeholder="Kết quả mong đợi..."
                   />
+                </td>
+                <td>
+                  <select
+                    style={selectStyle}
+                    value={tc.status || ''}
+                    onChange={e => handleCellChange(idx, 'status', e.target.value)}
+                    title="Trạng thái chạy test (đồng bộ với Lark + Release Check)"
+                  >
+                    {STATUSES.map(s => <option key={s || 'none'} value={s}>{s || '—'}</option>)}
+                  </select>
                 </td>
                 <td style={{ textAlign: 'center' }}>
                   <button

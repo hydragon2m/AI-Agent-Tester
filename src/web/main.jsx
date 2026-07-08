@@ -147,6 +147,14 @@ function App() {
   const visibleSkillIds = getVisibleSkillIds(projectTree.activeNode?.type, activePlan);
   const planConfigured = !!(activePlan && (activePlan.status === 'configured' || activePlan.status === 'approved'));
 
+  // Module/Screen/Feature của node đang chọn (context) — dùng cho bảng TC + export CSV.
+  const nodePathInfo = { module: '', screen: '', feature: '' };
+  for (const n of projectTree.activePath) {
+    if (n.type === 'module') nodePathInfo.module = n.name;
+    else if (n.type === 'screen') nodePathInfo.screen = n.name;
+    else if (n.type === 'feature') nodePathInfo.feature = n.name;
+  }
+
   // Tải test plan của project chứa node đang chọn (cho gating + banner cảnh báo).
   useEffect(() => {
     const node = projectTree.activeNode;
@@ -376,7 +384,8 @@ function App() {
       }
       await saveSkillRun(workspace.input, parsed, generated.output, generated.provider);
       setToast(`Đã sinh output bằng ${generated.provider}`);
-      if (workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases) && parsed.testCases.length) {
+      // Chỉ auto-audit khi user bật checkbox (tiết kiệm token); mặc định tắt — user tự bấm "Đánh giá chất lượng" ở Output.
+      if (workspace.options.autoAudit && workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases) && parsed.testCases.length) {
         await runQualityCheck(parsed.testCases, workspace.input);
       }
     } catch (e) {
@@ -816,7 +825,7 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
   function exportOutput(format = 'txt') {
     if (!workspace.output && !workspace.rawOutput) return;
     if (workspace.activeSkill === 'testcase') {
-      if (format === 'csv') return downloadFile(toCsv(testCases, lark.larkMapping), `test-cases-${Date.now()}.csv`, 'text/csv');
+      if (format === 'csv') return downloadFile(toCsv(testCases, nodePathInfo, lark.larkMapping), `test-cases-${Date.now()}.csv`, 'text/csv');
       if (format === 'md') return downloadFile(toMarkdown(workspace.output), `test-cases-${Date.now()}.md`, 'text/markdown');
       return downloadFile(JSON.stringify(workspace.output || {}, null, 2), `test-cases-${Date.now()}.json`, 'application/json');
     }
@@ -1150,6 +1159,7 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               onSubmitClarifications={handleClarificationSubmit}
               loading={loading}
               onUpdateTestCases={handleUpdateTestCases}
+              nodePath={nodePathInfo}
             />
           </section>
           </>

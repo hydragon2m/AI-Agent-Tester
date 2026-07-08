@@ -103,21 +103,65 @@ export function stageTypeLabel(key) {
   return STAGE_TYPES.find(t => t.key === key)?.label || key;
 }
 
-// Bộ stage khởi tạo cho 1 template — dùng làm fallback nếu AI lỗi, và làm khung
-// để merge kết quả AI vào (giữ đúng thứ tự + đủ 6 activity).
+// Chi tiết CHUẨN của từng hoạt động test (dùng chung mọi template — chỉ khác nhau ở
+// stage nào được BẬT). Cho phép sinh Test Strategy đầy đủ bằng CODE (0 token) thay vì AI.
+export const STAGE_DETAILS = {
+  api: {
+    stageType: 'integration', trigger: 'Ngay khi dev hoàn thành endpoint', skills: ['apitest'],
+    entryCriteria: 'Endpoint đã deploy lên môi trường test, có API spec/tài liệu',
+    exitCriteria: '100% API test case pass, 0 bug P1/P2 trên API',
+    owner: 'QA API / Dev', sprint: 'Sớm — khi backend sẵn sàng',
+  },
+  smoke: {
+    stageType: 'integration', trigger: 'Mỗi khi có build mới deploy', skills: ['testcase'],
+    entryCriteria: 'Build deploy thành công lên môi trường test',
+    exitCriteria: 'Toàn bộ smoke test pass (luồng chính không bể)',
+    owner: 'QA', sprint: 'Mỗi build',
+  },
+  manual: {
+    stageType: 'new_feature', trigger: 'Sau khi smoke test pass', skills: ['testcase', 'uitest'],
+    entryCriteria: 'Smoke đã pass, feature sẵn sàng test chức năng',
+    exitCriteria: 'Full functional test pass, bug P1/P2 đã fix & verify',
+    owner: 'QA Manual', sprint: 'Trong sprint phát triển feature',
+  },
+  regression: {
+    stageType: 'regression', trigger: 'Trước mỗi release / sau khi fix bug lớn', skills: ['testcase'],
+    entryCriteria: 'Các thay đổi đã test xong ở stage trước',
+    exitCriteria: 'Bộ regression pass 100%, không phát sinh hồi quy',
+    owner: 'QA', sprint: 'Trước release',
+  },
+  performance: {
+    stageType: 'pre_release', trigger: 'Trên staging trước khi release', skills: ['performance'],
+    entryCriteria: 'Chức năng đã ổn định trên staging',
+    exitCriteria: 'Đạt ngưỡng KPI (P95 latency, error rate, throughput) đã đặt',
+    owner: 'Performance Engineer', sprint: 'Giai đoạn pre-release',
+  },
+  security: {
+    stageType: 'pre_release', trigger: 'Trên staging trước khi release', skills: ['security'],
+    entryCriteria: 'Chức năng đã ổn định trên staging',
+    exitCriteria: 'Không còn lỗ hổng Critical/High theo OWASP checklist',
+    owner: 'Security QA', sprint: 'Giai đoạn pre-release',
+  },
+};
+
+// Bộ stage khởi tạo cho 1 template — CHI TIẾT ĐẦY ĐỦ (từ STAGE_DETAILS) + enabled theo
+// template. Dùng làm: khung merge kết quả AI (normalizeStages), và nguồn sinh strategy bằng code.
 export function buildDefaultStages(templateKey) {
   const tpl = getTemplate(templateKey);
   const enabled = new Set(tpl?.enabledByDefault || []);
-  return STAGE_ACTIVITIES.map(a => ({
-    key: a.key,
-    activity: a.label,
-    stageType: '',
-    enabled: enabled.has(a.key),
-    trigger: '',
-    skills: [],
-    entryCriteria: '',
-    exitCriteria: '',
-  }));
+  return STAGE_ACTIVITIES.map(a => {
+    const d = STAGE_DETAILS[a.key] || {};
+    return {
+      key: a.key,
+      activity: a.label,
+      stageType: d.stageType || '',
+      enabled: enabled.has(a.key),
+      trigger: d.trigger || '',
+      skills: d.skills ? [...d.skills] : [],
+      entryCriteria: d.entryCriteria || '',
+      exitCriteria: d.exitCriteria || '',
+    };
+  });
 }
 
 // Chuẩn hóa stages AI trả về: khớp theo key với 6 activity chuẩn, giữ nguyên thứ tự,
@@ -144,4 +188,33 @@ export function normalizeStages(aiStages, templateKey) {
       exitCriteria: typeof ai.exitCriteria === 'string' ? ai.exitCriteria : def.exitCriteria,
     };
   });
+}
+
+// Sinh Test Strategy HOÀN CHỈNH bằng CODE (0 token, tức thời) — summary + stages +
+// executionPlan + releaseGate, dựa trên template. Nếu truyền stagesOverride (ví dụ user
+// đã toggle trong wizard) thì dùng bộ đó; executionPlan/releaseGate tính theo stage đang BẬT.
+export function generateDefaultStrategy(templateKey, projectName, note, stagesOverride) {
+  const stages = Array.isArray(stagesOverride) && stagesOverride.length
+    ? stagesOverride
+    : buildDefaultStages(templateKey);
+  const enabled = stages.filter(s => s.enabled);
+  const tpl = getTemplate(templateKey);
+
+  const summary = `Chiến lược test cho "${projectName || 'dự án'}" theo loại "${tpl?.label || templateKey}". `
+    + (enabled.length
+      ? `Chạy ${enabled.length} stage: ${enabled.map(s => s.activity).join(', ')}.`
+      : 'Chưa bật stage nào — cần cấu hình trước khi release.')
+    + (note && note.trim() ? ` Ghi chú: ${note.trim()}` : '');
+
+  const executionPlan = {
+    priorityOrder: enabled.map(s => s.key),
+    sprintMap: enabled.map(s => ({ stage: s.key, when: STAGE_DETAILS[s.key]?.sprint || '' })),
+    ownerMap: enabled.map(s => ({ stage: s.key, owner: STAGE_DETAILS[s.key]?.owner || 'QA' })),
+  };
+
+  const releaseGate = enabled.length
+    ? `Đủ điều kiện release khi các stage bật (${enabled.map(s => s.activity).join(', ')}) đều đạt exit criteria, 0 bug P1 open.`
+    : 'Chưa bật stage nào — cần cấu hình kế hoạch test trước khi release.';
+
+  return { summary, stages, executionPlan, releaseGate };
 }

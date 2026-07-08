@@ -17,6 +17,13 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
             </button>
           ))}
         </div>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          title="Nếu bật: sau khi sinh TC sẽ tự gọi AI đánh giá chất lượng (tốn thêm ~1 lượt token). Nếu tắt: bấm nút 'Đánh giá chất lượng' ở Output khi cần."
+        >
+          <input type="checkbox" checked={!!options.autoAudit} onChange={e => patch({ autoAudit: e.target.checked })} />
+          Tự động đánh giá chất lượng (tốn thêm token)
+        </label>
       </div>
     );
   }

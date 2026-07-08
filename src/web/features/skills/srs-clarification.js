@@ -24,13 +24,19 @@ export function parseClarificationQuestions(markdownText) {
   const sectionBreakIdx = afterHeader.search(/\n(?:##\s|---)/);
   const linesBlock = sectionBreakIdx === -1 ? afterHeader : afterHeader.slice(0, sectionBreakIdx);
 
+  // Normalize each line by stripping leading '>' and whitespace
+  const cleanLinesBlock = linesBlock
+    .split('\n')
+    .map(line => line.replace(/^[ \t>]+/g, ''))
+    .join('\n');
+
   // Matches "- *Label*: text", "* **Label:** text", "- **Label**: text", etc.
   // Bullet must start at column 0 — nested sub-bullets (indented "Gợi ý: ..."
   // hints under a question) are intentionally not treated as separate questions.
   const questionRegex = /^[-*]\s*\*{1,2}([^*:\n]+?)(?::\*{1,2}|\*{1,2}:)\s*(.+)$/gm;
   const questions = [];
   let m;
-  while ((m = questionRegex.exec(linesBlock)) !== null) {
+  while ((m = questionRegex.exec(cleanLinesBlock)) !== null) {
     const label = (m[1] || 'Câu hỏi').trim();
     const text = m[2].trim();
     if (label && text) questions.push({ label, text });

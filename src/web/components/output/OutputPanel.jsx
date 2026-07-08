@@ -60,7 +60,7 @@ function SrsCompleteBanner({ signature }) {
   );
 }
 
-export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading, onUpdateTestCases }) {
+export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading, onUpdateTestCases, nodePath }) {
   if (!output && !rawOutput) return <div className="empty-state table-empty">Chưa có output.</div>;
   if (activeSkill === 'testcase') {
     return (
@@ -77,6 +77,7 @@ export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDeci
         onApplyReview={onApplyReview}
         onDismissReview={onDismissReview}
         onUpdateTestCases={onUpdateTestCases}
+        nodePath={nodePath}
       />
     );
   }
@@ -103,7 +104,7 @@ export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDeci
   );
 }
 
-function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onUpdateTestCases }) {
+function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onUpdateTestCases, nodePath }) {
   if (!result?.testCases) return <CodeOutput value={rawOutput} />;
   const hasOverview = Boolean(result.summary) || result.assumptions?.length > 0 || result.openQuestions?.length > 0;
 
@@ -146,7 +147,7 @@ function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggest
             <span>Danh sách Test Case</span>
             <span className="output-count-badge">{result.testCases.length}</span>
           </div>
-          <TestCaseTable testCases={result.testCases} onUpdate={onUpdateTestCases} />
+          <TestCaseTable testCases={result.testCases} onUpdate={onUpdateTestCases} nodePath={nodePath} />
         </div>
       )}
     </div>
