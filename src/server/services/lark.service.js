@@ -1,5 +1,5 @@
 const { getActiveKey, saveProviderSetting } = require('./provider.service');
-const { getTestCases, markLarkSynced, clearLarkSyncForProject } = require('./test-case.service');
+const { getTestCases, getTestCasesForScope, markLarkSynced, clearLarkSyncForProject } = require('./test-case.service');
 const { getNodeById, getNodePath } = require('./node.service');
 const { getLarkLink, saveLarkLink } = require('./project.service');
 
@@ -162,18 +162,18 @@ function buildRequiredFieldDefs(bugTableId) {
   ];
 }
 
-async function ensureTestCaseTable(appToken, token, explicitTableId, bugTableId) {
+async function ensureTestCaseTable(appToken, token, explicitTableId, bugTableId, tableName = 'Test Cases') {
   if (explicitTableId) {
     return { tableId: explicitTableId, created: false };
   }
-  const existing = await findTableByName(appToken, token, 'Test Cases');
+  const existing = await findTableByName(appToken, token, tableName);
   if (existing) {
     return { tableId: existing.table_id, created: false };
   }
   const table = await larkFetch(`/bitable/v1/apps/${appToken}/tables`, {
     method: 'POST',
     token,
-    body: { table: { name: 'Test Cases', fields: buildRequiredFieldDefs(bugTableId) } }
+    body: { table: { name: tableName, fields: buildRequiredFieldDefs(bugTableId) } }
   });
   return { tableId: table.table_id || table.table?.table_id, created: true };
 }
@@ -425,6 +425,147 @@ async function pushTestCases(nodeId) {
   return summary;
 }
 
+function sanitizeTableName(name) {
+  // Lark table names can't be blank and are capped in length; strip newlines/tabs.
+  const clean = String(name || '').trim().replace(/[\r\n\t]+/g, ' ').slice(0, 100);
+  return clean || 'Test Cases';
+}
+
+// Pushes a batch of raw test_cases rows (each carrying its own `_path` for the
+// Screen/Feature columns) into one already-resolved Lark table. Mirrors the
+// create/update+dedup logic of pushTestCases but works off explicit rows +
+// per-row path so it can serve a whole scope. `link` = { appToken,
+// testcaseTableId, bugTableId }.
+async function syncRowsToTable(link, token, rows) {
+  const summary = { created: 0, updated: 0, bugsLinked: 0, errors: [] };
+  const toCreate = [];
+  const toUpdate = [];
+
+  for (const tc of rows) {
+    try {
+      const fields = buildRecordFields(tc, tc._path || {});
+      if (tc.related_bug && tc.related_bug.trim()) {
+        const bugRecordId = await findOrCreateBugRecord(link, token, tc.related_bug);
+        if (bugRecordId) {
+          fields['Related Bug'] = [bugRecordId];
+          summary.bugsLinked++;
+        }
+      }
+      const entry = { tc, fields };
+      if (tc.lark_record_id) toUpdate.push(entry);
+      else toCreate.push(entry);
+    } catch (e) {
+      summary.errors.push(`${tc.external_id || tc.id}: ${e.message}`);
+    }
+  }
+
+  for (const batch of chunk(toCreate, BATCH_SIZE)) {
+    try {
+      const res = await larkFetch(`/bitable/v1/apps/${link.appToken}/tables/${link.testcaseTableId}/records/batch_create`, {
+        method: 'POST',
+        token,
+        body: { records: batch.map(e => ({ fields: e.fields })) }
+      });
+      const created = res.records || [];
+      for (let i = 0; i < batch.length; i++) {
+        const recordId = created[i]?.record_id;
+        if (recordId) {
+          await markLarkSynced(batch[i].tc.id, recordId);
+          summary.created++;
+        }
+      }
+    } catch (e) {
+      summary.errors.push(`batch_create: ${e.message}`);
+    }
+  }
+
+  for (const batch of chunk(toUpdate, BATCH_SIZE)) {
+    try {
+      await larkFetch(`/bitable/v1/apps/${link.appToken}/tables/${link.testcaseTableId}/records/batch_update`, {
+        method: 'POST',
+        token,
+        body: { records: batch.map(e => ({ record_id: e.tc.lark_record_id, fields: e.fields })) }
+      });
+      for (const e of batch) {
+        await markLarkSynced(e.tc.id, e.tc.lark_record_id);
+        summary.updated++;
+      }
+    } catch (e) {
+      summary.errors.push(`batch_update: ${e.message}`);
+    }
+  }
+
+  return summary;
+}
+
+// Pushes a whole scope to ONE Lark Base given by URL, one table per project
+// (table named after the project). System scope → many tables in the same
+// Base; project/module/screen/feature scope → a single table. When saveLink is
+// true, each project's resolved table is persisted as its Lark link (so the
+// per-node "Đẩy lên Lark" keeps working afterwards). Pure code + Lark API → 0 AI token.
+async function pushTestCasesScope(scopeType, scopeId, larkUrl, saveLink) {
+  const config = await requireConfig();
+  const token = await getTenantAccessToken(config);
+  const parsedUrl = parseBaseUrl(larkUrl);
+  const appToken = await resolveAppToken(parsedUrl, token);
+  const bugTable = await ensureBugTable(appToken, token);
+
+  const { scopeName, groups } = await getTestCasesForScope(scopeType, scopeId);
+
+  const result = { scopeName, appToken, tables: [], totals: { created: 0, updated: 0, bugsLinked: 0 }, errors: [] };
+  const usedNames = new Map(); // sanitized table name -> projectId, so two distinct projects never merge
+
+  for (const group of groups) {
+    if (!group.rows.length) {
+      result.tables.push({ projectName: group.projectName, created: 0, updated: 0, skipped: true, note: 'không có test case' });
+      continue;
+    }
+
+    let name = sanitizeTableName(group.projectName);
+    if (usedNames.has(name) && usedNames.get(name) !== group.projectId) {
+      let i = 2;
+      while (usedNames.has(`${name} (${i})`)) i++;
+      name = `${name} (${i})`;
+    }
+    usedNames.set(name, group.projectId);
+
+    try {
+      const tcTable = await ensureTestCaseTable(appToken, token, null, bugTable.tableId, name);
+      await reconcileFields(appToken, tcTable.tableId, token, bugTable.tableId);
+      const link = { appToken, testcaseTableId: tcTable.tableId, bugTableId: bugTable.tableId };
+      const summary = await syncRowsToTable(link, token, group.rows);
+
+      result.tables.push({
+        projectName: group.projectName,
+        tableName: name,
+        tableId: tcTable.tableId,
+        createdTable: tcTable.created,
+        created: summary.created,
+        updated: summary.updated,
+        bugsLinked: summary.bugsLinked
+      });
+      result.totals.created += summary.created;
+      result.totals.updated += summary.updated;
+      result.totals.bugsLinked += summary.bugsLinked;
+      if (summary.errors.length) result.errors.push(...summary.errors.map(msg => `[${group.projectName}] ${msg}`));
+
+      if (saveLink && group.projectId) {
+        await saveLarkLink(group.projectId, {
+          appToken,
+          testcaseTableId: tcTable.tableId,
+          bugTableId: bugTable.tableId,
+          sourceUrl: larkUrl
+        });
+      }
+    } catch (e) {
+      result.errors.push(`[${group.projectName}] ${e.message}`);
+      result.tables.push({ projectName: group.projectName, tableName: name, error: e.message });
+    }
+  }
+
+  return result;
+}
+
 module.exports = {
   getConfig,
   saveConfig,
@@ -432,6 +573,7 @@ module.exports = {
   linkProject,
   getProjectLink,
   pushTestCases,
+  pushTestCasesScope,
   getTenantAccessToken,
   reconcileFields,
   requireConfig

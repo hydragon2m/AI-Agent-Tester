@@ -2498,7 +2498,8 @@ select:focus,
 }
 
 .tc-table-wrapper {
-  overflow-x: auto;
+  overflow: auto;            /* cuộn CẢ ngang + dọc trong khung */
+  max-height: 65vh;          /* giới hạn cao → bảng cuộn nội bộ, thanh cuộn ngang luôn thấy được (không phải kéo hết TC) */
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   margin-top: 12px;
@@ -2520,9 +2521,12 @@ select:focus,
 
 .tc-table th {
   color: var(--primary-light);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-card2); /* solid để header dính không bị lộ dòng bên dưới xuyên qua */
   font-weight: 700;
   white-space: nowrap;
+  position: sticky;           /* header dính khi cuộn dọc trong khung */
+  top: 0;
+  z-index: 2;
 }
 
 .tc-table td {

@@ -333,6 +333,13 @@ Trả về audit report (markdown):
 
 ### FLOW 5 — Review & Edit TC (sau Audit)
 
+> ⚠️ **Bảng TC (`TestCaseTable.jsx`) đã nâng cấp nhiều (2026-07-08)**: cột Module/Screen/Feature
+> (Screen/Feature read-only từ cây) + Status (dropdown, gần cuối) + hover `title` xem full;
+> **kéo chỉnh độ rộng cột** (`table-layout: fixed` + `COLUMNS`/`colWidths`); **cuộn ngang** trong
+> khung (`.tc-table-wrapper` max-height 65vh + `overflow:auto`, header **sticky**); **phân trang
+> 20 TC/trang** — GIỮ INDEX TUYỆT ĐỐI (`idx = pageStart + i`) khi sửa/xóa. IDE Gemini thêm:
+> auto-sinh TC ID (`getNextTestCaseId`) khi Thêm dòng, `sortTestCases` khi lưu, empty-state khi 0 TC.
+
 ```
 User đọc audit report → thấy TC-PM-020 bị flag "expected result mơ hồ"
     ↓
@@ -559,6 +566,58 @@ status TC thật.
 
 ---
 
+### FLOW 9 — Export Test Case theo phạm vi rộng (System / Project / Module / Screen / Feature) — mới 2026-07-08, 100% CODE, 0 token AI
+
+```
+Có 2 hành động export ĐỘC LẬP (tách rời, không gộp 1 nút):
+  (A) Export to Excel/CSV — tải file về máy.
+  (B) Export to Lark Base — đẩy dữ liệu lên Lark theo URL.
+
+★ ĐIỂM VÀO (entry points) ★
+  - Trên node (cây, menu ⋯ của TreeNode): "⤓ Export Excel/CSV" + "🦊 Export to Lark"
+    → scopeType = node.type (project/module/screen/feature), scopeId = node.id.
+  - Trên tiêu đề nhóm System (ProjectSidebar, chỉ system thật): 2 icon ⤓ + 🦊
+    → scopeType = 'system', scopeId = sys.id.
+  - Trong Output panel (node đang chọn): "⤓ Export cả nhánh" + "🦊 Lark cả nhánh"
+    → export toàn bộ TC của node đang chọn + mọi node con (đọc từ DB, KHÁC với
+      nút CSV/MD/Copy-Lark vốn export output đang hiển thị trong bộ nhớ).
+
+★ BACKEND (0 token — thuần DB + Lark API) ★
+  test-case.service.js#getTestCasesForScope(scopeType, scopeId):
+    - LUÔN gom theo PROJECT: system → mỗi project 1 group; scope nhỏ hơn → 1 group
+      (project sở hữu). Mỗi row = raw test_cases + `_path{module,screen,feature}`
+      (đi ngược cây). Project chưa gán system KHÔNG nằm trong system scope.
+  GET /testcases/export-scope?scopeType=&scopeId=  (map sang shape frontend +
+    nodePath). ⚠️ PHẢI đứng TRƯỚC route GET '/:nodeId' trong test-cases.routes.js,
+    nếu không Express nuốt '/export-scope' thành nodeId.
+  lark.service.js#pushTestCasesScope(scopeType, scopeId, url, saveLink):
+    - resolve Base từ URL → ensureBugTable → mỗi project 1 bảng riêng (tên bảng =
+      tên project, `ensureTestCaseTable(...tableName)`) → reconcileFields →
+      syncRowsToTable (create/update + dedup qua lark_record_id, tái dùng logic
+      của pushTestCases nhưng KHÔNG sửa pushTestCases — hàm helper MỚI).
+    - saveLink=true → lưu lark link cho từng project (project sau vẫn "Đẩy lên Lark").
+    - 2 project trùng tên trong 1 system → tên bảng thứ 2 thêm " (2)" (không đè nhau).
+  POST /api/lark/push-scope { scopeType, scopeId, url, saveLink }.
+
+★ FRONTEND ★
+  - features/testcase/testcase-export.js: scopeToCsv(groups,{includeProjectName}) +
+    scopeToMarkdown(...). System → CSV gộp 1 file + cột "Project Name" ĐẦU TIÊN.
+  - ExportFileModal.jsx (chọn CSV/Markdown → tải), ExportLarkModal.jsx (URL +
+    checkbox saveLink + kết quả từng bảng). Dùng class modal có sẵn, KHÔNG thêm CSS.
+  - main.jsx: handleExportScopeFile (fetch rồi mở modal file), handleExportScopeLark
+    (mở modal Lark). Wire vào ProjectSidebar (onExportFile/onExportLark) + Output panel.
+```
+
+**⛔ KHÔNG ĐƯỢC:**
+- Chuyển route `/testcases/export-scope` xuống DƯỚI `/:nodeId` (sẽ bị nuốt thành nodeId).
+- Sửa `pushTestCases`/`buildRecordFields`/`reconcileFields` khi build lên scope push
+  — scope push dùng helper MỚI `syncRowsToTable` + `pushTestCasesScope`, giữ path cũ nguyên.
+- Bỏ tham số `tableName` (mặc định 'Test Cases') của `ensureTestCaseTable` — caller cũ
+  `linkProject` truyền 4 tham số, dựa vào default.
+- Đổi thứ tự cột CSV (17 cột, khớp `toCsv`); System thêm 'Project Name' ở ĐẦU.
+
+---
+
 ### FLOW TỔNG — Chuỗi hoàn chỉnh
 
 ```
@@ -620,6 +679,7 @@ status TC thật.
 | SYS | System Layer (bảng `systems` + sidebar phân cấp System→Project) | ✅ Code done | `/api/systems` CRUD; `projects.system_id`; CHƯA click-test UI |
 | SG | Skill Gating theo Test Plan (`utils/skill-gating.js`) | ✅ Code done | Ẩn/hiện skill theo stage bật trong plan; plan chưa cấu hình → hiện đủ (backward-compat) |
 | TP | Test Plan (tái dùng `test_strategies`) + wizard tạo project | ✅ Code done | `CreateProjectModal` 3 bước; status `configured`; StrategyPanel 2 tab; CHƯA click-test UI |
+| EXP | Export TC theo scope (System/Project/Module/Screen/Feature) — CSV/Markdown + Lark Base, 0 token AI | 🟡 Code done | `getTestCasesForScope`, `/testcases/export-scope`, `pushTestCasesScope`, `/api/lark/push-scope`, 2 modal + tree menu + system icons. CSV verify OK (smoke test). **Lark push CHƯA verify** (cần creds thật). **Cần restart backend** để nạp route mới |
 
 ### Known Issues
 | # | Mô tả | File | Workaround |
@@ -635,6 +695,10 @@ status TC thật.
 | 9 | Release Check phụ thuộc `test_cases.status` (Pass/Fail/Block) — hiện phần lớn TC status rỗng nên %/Go-No-go thường thấp/'pending' | strategy.service.js#getReleaseCheck | ĐÚNG thiết kế, không phải bug. Cần F3 (Lark→Tool status sync) để có status thật |
 | 10 | Độ rộng cột bảng TC RESET khi reload trang (lưu trong React state, chưa persist) | TestCaseTable.jsx | Thêm localStorage (như `useResizableWidth` của sidebar) nếu cần nhớ |
 | 11 | `QUOTA_EXCEEDED` khi gen AI = Gemini free-tier hết hạn mức (chỉ có key Gemini → không fallback) — KHÔNG phải bug | gemini.provider.js / ai-router.service.js | Bật Demo mode / dùng "Sinh bằng Code" / gen TC không auto-audit / đợi reset / đổi key ở Settings (đọc-live). Cân nhắc thêm provider fallback |
+| 12 | **Đa công cụ sửa cùng working tree** (Claude Code + IDE Gemini) → dễ đè nhau (đã xảy ra: index.css, srs-clarification.js, TestCaseTable/OutputPanel/main). User chốt **Claude sở hữu CSS** | (nhiều file) | Mỗi file chỉ 1 công cụ sửa; LUÔN đọc lại file trước khi sửa (file hay đổi giữa các lượt) |
+| 13 | `sortTestCases` + `getNextTestCaseId` (do IDE Gemini thêm) chưa được Claude review kỹ — tiêu chí sort + chống trùng ID cần verify | testcase-quality.js, TestCaseTable.jsx | Session sau đọc + test trước khi build tiếp lên |
+| 14 | **Export to Lark theo scope (`pushTestCasesScope`) CHƯA verify end-to-end** — không có Lark credentials thật để test; mới `node --check` + logic soi theo `pushTestCases` đang chạy | lark.service.js | User test với Base thật. Nếu 2 project trùng tên → bảng thứ 2 thêm " (2)" |
+| 15 | Route `/testcases/export-scope` + `/api/lark/push-scope` mới → **backend đang chạy (bản cũ) trả 200 rỗng cho export-scope** (nuốt thành `/:nodeId`). Phải RESTART `npm start` mới nạp route | test-cases.routes.js, lark.routes.js | Probe: `/testcases/export-scope` (thiếu param) phải trả **400** = backend mới; 200 = backend cũ |
 
 ---
 
@@ -654,3 +718,5 @@ status TC thật.
 | 2026-07-08 | **Feature MỚI: Test Strategy (TS-F6+F7)** — skill `teststrategy` (JSON stages/plan theo 4 template, 2 trục stage), table `test_strategies` + service + routes `/api/strategies`, `StrategyPanel.jsx` inline tại project node (Generate→Review→Approve→Current), ẩn skill khỏi sidebar. Project node giờ CHỈ hiện màn Test Strategy (ẩn SkillSidebar + Requirement/Output). Xem FLOW 7 | schema.sql, strategy.service.js (mới), strategy.routes.js (mới), app.js, strategy-templates.js (mới), skill-registry.js, SkillSidebar.jsx, strategy.api.js (mới), StrategyPanel.jsx (mới), main.jsx | ✅ Build pass; verify schema in-memory + HTTP CRUD end-to-end (port tạm) + gọi AI Gemini thật ra JSON đúng schema. **CHƯA click-test UI browser**. Root cause user báo "gen không chạy" = backend cũ chưa restart (route 404) |
 | 2026-07-08 | **Nâng cấp: System Layer + Test Plan + Skill Gating** (GỘP vào Test Strategy, không tạo bản song song) — bảng `systems` + `/api/systems` + sidebar phân cấp **System→Project→Module→Screen→Feature**; cột `projects.system_id` + `test_cases.stage`; **skill-gating** (`utils/skill-gating.js` + 5 template mới + ALWAYS_ON + applicable_nodes trong `strategy-templates.js`); **Test Plan tái dùng bảng `test_strategies`** (status `configured` + `getReleaseCheck` + `GET /api/strategies/release-check`); `CreateProjectModal` wizard 3 bước; `StrategyPanel` → **2 tab** (Kế hoạch test + Release Check); gating + banner cảnh báo trong main.jsx; badge sidebar gọn (mã ngắn ✓NEW/…). Xem FLOW 8. Commit `28c9063` | systems.service/routes (mới), strategy.service/routes, node/project.service, nodes.routes, schema.sql, db_manager, app.js, strategy-templates, skill-gating.js (mới), systems.api.js (mới), CreateProjectModal.jsx (mới), StrategyPanel, ProjectSidebar, SkillSidebar, TreeNode, useProjectTree, strategy.api, main.jsx | ✅ Build (70 modules) + in-memory tests (schema/gating 11/release-check 13/step4 8, verbatim SQL) + **E2E service THẬT trên DB THẬT** (migrations + round-trip 11 assert + cleanup sạch) + restart & probe live (/api/systems 200, release-check 400). **CHƯA click-test UI browser** |
 | 2026-07-08 | **Tối ưu token + Tinh giản UI + Cột TC + Kéo rộng cột** — (A) Test Strategy sinh bằng CODE 0 token (`generateDefaultStrategy`+`STAGE_DETAILS`, nút "Sinh bằng Code" cạnh "Sinh bằng AI", wizard auto-fill plan chi tiết bằng code); (B) auto quality-audit → TÙY CHỌN (checkbox `autoAudit`, mặc định TẮT → gen TC 1 lượt AI thay vì 2); (C) tinh giản UI chỉ qua `index.css` (palette phẳng, bỏ glow/gradient/hover-lift, scrollbar mảnh — giữ tên biến); (D) bảng TC thêm cột Module/Screen/Feature + Status gần cuối + `title` hover xem full; CSV/Copy-Lark/Push-Lark có đủ cột + Status gần cuối; (E) kéo chỉnh độ rộng cột (table-layout fixed). Xem FLOW 3/4/8 | strategy-templates, CreateProjectModal, StrategyPanel, useSkillWorkspace, SkillOptions, TestCaseTable, OutputPanel, testcase-export, lark.service, main.jsx, index.css | ✅ Build pass + logic tests (gencode 17, export 10 assert). **CHƯA click-test UI browser**. Bối cảnh: user gặp QUOTA_EXCEEDED (Gemini hết hạn mức, không phải bug) → loạt tối ưu này |
+| 2026-07-08 | **Feature MỚI: Export TC phạm vi rộng (System/Project/Module/Screen/Feature) — 0 token AI** — 2 hành động tách rời: Export Excel/CSV (tải file) + Export to Lark Base (đẩy URL). Backend: `getTestCasesForScope` (gom theo project, kèm `_path`), `GET /testcases/export-scope` (TRƯỚC `/:nodeId`), `pushTestCasesScope` + helper `syncRowsToTable` (KHÔNG sửa `pushTestCases`), `ensureTestCaseTable(tableName)` (mỗi project 1 bảng), `POST /api/lark/push-scope`. Frontend: `scopeToCsv`/`scopeToMarkdown` (System +cột Project Name), `ExportFileModal`/`ExportLarkModal` (mới), menu ⋯ TreeNode + 2 icon trên header System + 2 nút "cả nhánh" ở Output. Xem FLOW 9 | test-case.service.js, test-cases.routes.js, lark.service.js, lark.routes.js, test-cases.api.js, lark.api.js, testcase-export.js, ExportFileModal.jsx (mới), ExportLarkModal.jsx (mới), TreeNode.jsx, ProjectSidebar.jsx, main.jsx | 🟡 Build pass (72 modules) + smoke test THẬT (`getTestCasesForScope` + `scopeToCsv`/`scopeToMarkdown` trên in-memory schema thật: gom project, path, loại orphan, cột Project Name — all pass). **Lark push CHƯA verify (thiếu creds). CẦN RESTART backend** (bản đang chạy chưa có route). CHƯA click-test UI |
+| 2026-07-08 | **UI polish + scroll bảng + phân trang TC** (một phần từ IDE Gemini) — font `--font-sans` thêm fallback **Segoe UI** (Plus Jakarta/Inter chưa import → trước rơi Arial); palette dịu (#0f1115/#e2e8f0), base 16px, phụ 14px, tắt lưới; icon mở rộng **▼/▶**; badge Test Plan **bỏ tick + màu theo template**; bỏ toggle detailLevel SRS + mở rộng ô Domain; **di nút Generate xuống cuối Requirement**; rename app "QA_Assistant" (commit `f6cbcfb`). CHƯA commit: **scroll ngang bảng TC** (`.tc-table-wrapper` max-height 65vh + overflow auto; `.tc-table th` sticky) + **phân trang 20/trang** (giữ index tuyệt đối). Kèm (IDE Gemini): `sortTestCases`, auto-ID `getNextTestCaseId`, empty-state bảng | index.css, TreeNode, ProjectSidebar, SkillOptions, AppHeader, tauri.conf, main.jsx, TestCaseTable, OutputPanel, testcase-quality.js | ✅ Build pass. **CHƯA click-test UI**. ⚠️ Đa công cụ sửa song song → user chốt **Claude sở hữu CSS** |

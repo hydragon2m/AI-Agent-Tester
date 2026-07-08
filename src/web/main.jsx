@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { generateAiOutput } from './backend-api/ai.api';
-import { fetchTestCases, saveTestCasesApi } from './backend-api/test-cases.api';
+import { fetchTestCases, saveTestCasesApi, exportScopeApi } from './backend-api/test-cases.api';
 import { fetchLarkLinkApi, linkLarkProjectApi, pushToLarkApi } from './backend-api/lark.api';
 import { createNodeApi } from './backend-api/nodes.api';
 import { createSkillRun, fetchSkillRuns } from './backend-api/skill-runs.api';
@@ -12,6 +12,8 @@ import { SkillSidebar } from './components/layout/SkillSidebar';
 import { LarkLinkModal } from './components/output/LarkLinkModal';
 import { ManualPromptModal } from './components/output/ManualPromptModal';
 import { OutputPanel } from './components/output/OutputPanel';
+import { ExportFileModal } from './components/output/ExportFileModal';
+import { ExportLarkModal } from './components/output/ExportLarkModal';
 import { ProviderSettingsModal } from './components/providers/ProviderSettingsModal';
 import { StrategyPanel } from './components/strategy/StrategyPanel';
 import { CreateProjectModal } from './components/strategy/CreateProjectModal';
@@ -21,7 +23,7 @@ import { getVisibleSkillIds } from './utils/skill-gating';
 import { fetchStrategyApi } from './backend-api/strategy.api';
 import { toCsv, toLarkClipboardPayload, toMarkdown } from './features/testcase/testcase-export';
 import { parseAiJson, stripCodeFence } from './features/testcase/testcase-parser';
-import { QUALITY_SYSTEM_PROMPT, buildQualityPrompt, buildFinalTestCases } from './features/testcase/testcase-quality';
+import { QUALITY_SYSTEM_PROMPT, buildQualityPrompt, buildFinalTestCases, sortTestCases } from './features/testcase/testcase-quality';
 import { useLarkConfig } from './state/useLarkConfig';
 import { useLarkMapping } from './state/useLarkMapping';
 import { buildContext, useProjectTree } from './state/useProjectTree';
@@ -125,6 +127,8 @@ function App() {
   const [decomposing, setDecomposing] = useState(false);
   const [createProject, setCreateProject] = useState(null); // { systemId, systemName } | null → mở CreateProjectModal
   const [activePlan, setActivePlan] = useState(undefined);   // undefined = chưa fetch, null = không có plan, obj = plan
+  const [exportFileData, setExportFileData] = useState(null);    // {scopeType, scopeName, groups} | null → mở ExportFileModal
+  const [exportLarkTarget, setExportLarkTarget] = useState(null); // {scopeType, scopeId, name} | null → mở ExportLarkModal
 
   const projectTree = useProjectTree(setToast);
   const providers = useProviderSettings(setToast);
@@ -378,10 +382,12 @@ function App() {
           });
 
       const parsed = skill.output === 'testcase' ? parseAiJson(generated.output) : stripCodeFence(generated.output);
-      workspace.setSkillOutput(parsed, generated.output);
       if (workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases)) {
-        await saveTestCasesApi(projectTree.activeNodeId, parsed.testCases);
+        const sorted = sortTestCases(parsed.testCases);
+        parsed.testCases = sorted;
+        await saveTestCasesApi(projectTree.activeNodeId, sorted);
       }
+      workspace.setSkillOutput(parsed, generated.output);
       await saveSkillRun(workspace.input, parsed, generated.output, generated.provider);
       setToast(`Đã sinh output bằng ${generated.provider}`);
       // Chỉ auto-audit khi user bật checkbox (tiết kiệm token); mặc định tắt — user tự bấm "Đánh giá chất lượng" ở Output.
@@ -716,7 +722,13 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     if (!projectTree.activeNodeId) return;
     setLoading(true);
     try {
-      await saveTestCasesApi(projectTree.activeNodeId, testCases);
+      const sorted = sortTestCases(testCases);
+      await saveTestCasesApi(projectTree.activeNodeId, sorted);
+      workspace.setSkillOutput({
+        ...workspace.output,
+        testCases: sorted,
+        total: sorted.length
+      }, workspace.rawOutput, 'testcase');
       setToast('Đã lưu các thay đổi của test case vào cơ sở dữ liệu!');
     } catch (e) {
       setToast(`Lỗi lưu test case: ${e.message}`);
@@ -927,6 +939,22 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
     }
   }
 
+  // Export test case theo scope (system/project/module/screen/feature) — 0 token AI.
+  // node = { id, name, type } (type === scopeType; 'system' cho nhóm System trên sidebar).
+  async function handleExportScopeFile(node) {
+    if (!node?.id || !node?.type) return;
+    try {
+      const data = await exportScopeApi(node.type, node.id);
+      setExportFileData(data);
+    } catch (e) {
+      setToast(`Không tải được test case để export: ${e.message}`);
+    }
+  }
+  function handleExportScopeLark(node) {
+    if (!node?.id || !node?.type) return;
+    setExportLarkTarget({ scopeType: node.type, scopeId: node.id, name: node.name });
+  }
+
   return (
     <>
       <div className="bg-grid" />
@@ -948,6 +976,8 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           onExport={exportTree}
           onImport={importTree}
           onCreateProject={(systemId, systemName) => setCreateProject({ systemId, systemName })}
+          onExportFile={handleExportScopeFile}
+          onExportLark={handleExportScopeLark}
         />
 
         {!isProjectNode && (
@@ -1109,6 +1139,20 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={() => exportOutput('md')} disabled={!testCases.length}>MD</button>}
                 {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={copyForLark} disabled={!testCases.length}>Copy Lark</button>}
                 <button className="btn-secondary" onClick={() => exportOutput()} disabled={!workspace.output && !workspace.rawOutput}>Export</button>
+                {projectTree.activeNodeId && projectTree.activeNode && (
+                  <button
+                    className="btn-secondary"
+                    title="Tải toàn bộ test case đã lưu của node này (kèm mọi node con) ra CSV/Markdown"
+                    onClick={() => handleExportScopeFile({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}
+                  >⤓ Export cả nhánh</button>
+                )}
+                {projectTree.activeNodeId && projectTree.activeNode && (
+                  <button
+                    className="btn-secondary"
+                    title="Đẩy toàn bộ test case đã lưu của node này (kèm mọi node con) lên Lark Base"
+                    onClick={() => handleExportScopeLark({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}
+                  >🦊 Lark cả nhánh</button>
+                )}
                 {workspace.activeSkill === 'srs' && (workspace.output || workspace.rawOutput) && (
                   <button className="btn-primary" onClick={sendSrsToTestCase} title="Chuyển nội dung SRS sang skill Test Cases">
                     Viết Test Case →
@@ -1124,7 +1168,7 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                     {decomposing ? 'Đang phân rã...' : 'Phân rã thành Feature'}
                   </button>
                 )}
-                {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && testCases.length > 0 && (
+                {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && (
                   <button className="btn-primary" onClick={handleSaveEditedTestCases} disabled={loading} title="Lưu lại toàn bộ chỉnh sửa test case của node này xuống cơ sở dữ liệu">
                     {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
                   </button>
@@ -1204,6 +1248,20 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           systemName={createProject.systemName}
           onClose={() => setCreateProject(null)}
           onCreated={handleProjectCreated}
+          onToast={setToast}
+        />
+      )}
+      {exportFileData && (
+        <ExportFileModal
+          data={exportFileData}
+          onClose={() => setExportFileData(null)}
+          onToast={setToast}
+        />
+      )}
+      {exportLarkTarget && (
+        <ExportLarkModal
+          scope={exportLarkTarget}
+          onClose={() => setExportLarkTarget(null)}
           onToast={setToast}
         />
       )}

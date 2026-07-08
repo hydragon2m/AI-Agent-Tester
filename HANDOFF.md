@@ -5,7 +5,140 @@
 
 ---
 
-## Session gần nhất: 2026-07-08 (máy Windows, phiên tối ưu & UI) — Tối ưu token + Tinh giản UI + Cột TC (M/S/F+Status) + Kéo rộng cột
+## Session gần nhất: 2026-07-08 (máy Windows, phiên Export scope) — Export Test Case phạm vi rộng (System/Project/Module/Screen/Feature): Excel/CSV + Lark Base, 0 token AI
+
+User đưa 1 implementation plan (feature Export TC phạm vi rộng, tách 2 hành động: Excel/CSV + Lark Base). Sau khi đối chiếu plan với code thật, phát hiện mô hình Lark hiện tại là **LINK theo project** (không phải push tự do theo URL như plan giả định) → điều chỉnh cách làm. User chốt: **build đè lên working tree hiện tại + commit chung 1 lần cuối**, **làm cả CSV lẫn Lark cùng lúc**. Feature 100% additive, thuần code (0 token AI). Build + smoke-test logic PASS; **Lark push CHƯA verify (thiếu creds)**; **CHƯA click-test UI**; **backend đang chạy là bản CŨ → phải restart**.
+
+### 1. Task đã hoàn thành
+- **Backend (0 token — thuần DB + Lark API)**: `getTestCasesForScope(scopeType, scopeId)` (LUÔN gom theo project, kèm `_path{module/screen/feature}`); `GET /testcases/export-scope` (đặt **TRƯỚC** `/:nodeId`); `pushTestCasesScope` + helper MỚI `syncRowsToTable` (tái dùng dedup `lark_record_id`, **KHÔNG đụng** `pushTestCases`); `ensureTestCaseTable(...tableName)` (mỗi project 1 bảng, tên = tên project); `POST /api/lark/push-scope`.
+- **Frontend**: `scopeToCsv`/`scopeToMarkdown` (System → gộp 1 file + cột **Project Name** ĐẦU tiên); `ExportFileModal.jsx` + `ExportLarkModal.jsx` (mới, dùng class modal sẵn có — **KHÔNG đụng index.css**); menu ⋯ `TreeNode` (Export Excel/CSV + Export to Lark); 2 icon **⤓/🦊** trên header System (`ProjectSidebar`); 2 nút **"⤓ Export cả nhánh" / "🦊 Lark cả nhánh"** ở Output panel (đọc DB theo scope node đang chọn, khác nút CSV/MD in-memory).
+
+### 2. File đã sửa / tạo mới
+- **Backend sửa**: `test-case.service.js`, `test-cases.routes.js`, `lark.service.js`, `lark.routes.js`.
+- **Frontend mới**: `components/output/ExportFileModal.jsx`, `components/output/ExportLarkModal.jsx`.
+- **Frontend sửa**: `features/testcase/testcase-export.js`, `backend-api/test-cases.api.js`, `backend-api/lark.api.js`, `components/tree/TreeNode.jsx`, `components/layout/ProjectSidebar.jsx`, `main.jsx`.
+
+### 3. Quyết định quan trọng
+- **Mô hình Lark thực tế ≠ plan**: Lark push cũ là link-per-project (`projects.lark_*`, `pushTestCases(nodeId)` cần project đã link, 1 bảng "Test Cases"). `pushTestCasesScope` là mở rộng: resolve Base từ URL → mỗi project 1 bảng riêng → reconcile field → push. **Không refactor** path cũ — thêm helper `syncRowsToTable`.
+- **Route `/export-scope` PHẢI trước `/:nodeId`** (Express sẽ nuốt path thành nodeId nếu đặt sau).
+- `getTestCasesForScope` LUÔN gom theo project (system → N group; scope nhỏ → 1 group). **Project chưa gán system KHÔNG vào system scope**.
+- 2 project trùng tên trong 1 system → bảng thứ 2 thêm `" (2)"` (không đè nhau).
+- **Không sửa `index.css`** (user đang mở file này trong IDE; modal dùng class `.modal*`/`.pf-*`/`.btn-*` có sẵn).
+- Output panel: giữ nguyên nút cũ (export output in-memory), **thêm** 2 nút "cả nhánh" đọc DB — phân biệt rõ.
+
+### 4. Lỗi còn lại / chưa hoàn tất
+- **Lark scope push (`pushTestCasesScope`) CHƯA verify end-to-end** — thiếu Lark credentials; mới `node --check` + soi logic theo `pushTestCases` đang chạy (Known Issue #14).
+- **CHƯA click-test UI thật** (menu export, 2 modal, icon System, nút "cả nhánh").
+- **Backend đang chạy = bản CŨ** (PID 18204): `/testcases/export-scope` trả **200 rỗng** (nuốt thành `/:nodeId`) → **PHẢI restart** `npm start` (Known Issue #15).
+- (Tồn từ trước) toàn bộ working tree phiên UI polish + thay đổi IDE Gemini (sort/auto-ID/empty-state/scroll/phân trang) vẫn CHƯA commit — phiên này **commit chung** theo yêu cầu user.
+
+### 5. Test đã chạy
+- `node --check` 4 file backend — PASS.
+- `npm run build` (Vite) — PASS (**72 modules**, +2 modal).
+- **Smoke test THẬT** (in-memory better-sqlite3 trên `schema.sql` thật, inject `db_manager` qua `require.cache` → chạy ĐÚNG `getTestCasesForScope` thật + `scopeToCsv`/`scopeToMarkdown` thật qua esbuild bundle): system gom đúng 2 project + **loại orphan**, `_path` đúng cả TC sâu (module→screen→feature) lẫn TC gắn thẳng module; module/feature/project scope đúng; CSV có cột **Project Name** đầu (system) / **TC ID** đầu (scope khác); steps đánh số + newline; MD section theo project — **tất cả PASS**. File test ở scratchpad (ngoài repo).
+- Probe backend: port 3001 LISTENING (PID 18204) nhưng **bản CŨ** (`/testcases/export-scope` → 200 thay vì 400).
+
+### 6. Lệnh cần chạy lại (Windows) — QUAN TRỌNG: PHẢI restart backend
+```powershell
+cd d:\HANH_TEST_AI\AI-Agent-Tester
+netstat -ano | findstr :3001   # PID 18204 = bản CŨ → kill rồi:
+npm start        # backend -> http://localhost:3001 (nạp route export-scope + push-scope)
+npm run dev      # frontend -> http://localhost:5173 (Vite HMR có JSX mới; hard-refresh Ctrl+Shift+R)
+# Probe xác nhận bản mới (PHẢI trả 400 khi thiếu param):
+#   curl -s -o NUL -w "%{http_code}" "http://localhost:3001/testcases/export-scope"
+```
+
+### 7. Task tiếp theo được khuyến nghị
+- **Restart backend + probe** (mục 6) — nếu không, UI export sẽ "không chạy" do route chưa nạp.
+- **Click-test UI**: menu ⋯ node → Export Excel/CSV (chọn CSV/MD → tải); icon ⤓ trên System → file gộp có cột Project Name; 🦊 Export to Lark với Base thật (verify mỗi project 1 bảng + saveLink lưu link).
+- **Verify Lark scope push** với creds thật (Known Issue #14).
+- Review `sortTestCases`/`getNextTestCaseId` (Gemini, Known Issue #13) vẫn còn nợ.
+
+### 8. Điều KHÔNG được làm ở session sau
+- KHÔNG chuyển route `/testcases/export-scope` xuống DƯỚI `/:nodeId` (bị nuốt thành nodeId).
+- KHÔNG refactor/sửa `pushTestCases`/`buildRecordFields`/`reconcileFields` khi build lên scope push — dùng helper MỚI `syncRowsToTable` + `pushTestCasesScope`.
+- KHÔNG bỏ tham số `tableName` (default `'Test Cases'`) của `ensureTestCaseTable` — `linkProject` cũ truyền 4 tham số, dựa vào default.
+- Giữ thứ tự 17 cột CSV khớp `toCsv`; System thêm `'Project Name'` ở ĐẦU (không xen giữa).
+- KHÔNG kết luận export lỗi khi chưa restart + probe backend (200 = cũ, **400** = mới).
+- Giữ nguyên mọi điều cấm phiên trước (Claude sở hữu `index.css`; phân trang dùng index tuyệt đối; không đổi tên biến `:root`; giữ Segoe UI fallback; không tạo `test_plans`/route song song; không bỏ filter internal SkillSidebar; `autoAudit=false` mặc định; không đổi route/response JSON; không rewrite code cũ đang chạy).
+
+---
+
+## Session trước: 2026-07-08 (máy Windows, phiên UI polish) — Font/palette + icon/badge màu + di nút + scroll bảng + phân trang TC (kèm thay đổi từ IDE Gemini: sort + auto-ID)
+
+Nối tiếp phiên tối ưu (bên dưới). User yêu cầu loạt chỉnh UI. **Phát hiện quan trọng: IDE Gemini của user đang sửa SONG SONG cùng working tree** (index.css, AppHeader, tauri.conf, srs-clarification, và turn cuối thêm sort/auto-ID/empty-state cho bảng TC). User đã chốt **Claude tiếp quản CSS**. Đã commit + push tới f6cbcfb; phần scroll bảng + phân trang + thay đổi Gemini turn cuối **CHƯA commit**.
+
+### 1. Task đã hoàn thành (Claude)
+- **Font & palette (commit f6cbcfb)**: `--font-sans` thêm fallback **Segoe UI** — root cause "chữ khó nhìn" là `Plus Jakarta Sans`+`Inter` **không được import** (không @import/@font-face) → rơi về Arial generic. Palette dịu chống lóa (nền #0f1115, text #e2e8f0), base 16px, nội dung phụ 14px, tắt lưới nền.
+- **Icon & badge (f6cbcfb)**: icon mở rộng cây/System `▾/▸` → **▼/▶** (rõ hơn); badge Test Plan **bỏ dấu tick**, phân biệt bằng **MÀU theo template** (new_feature=xanh dương, feature_addition=xanh lá, hotfix=cam, new_version=tím, full_product=cyan, Draft=xám). Map màu `TEMPLATE_COLORS` trong TreeNode.jsx.
+- **SRS options (f6cbcfb)**: bỏ toggle "Đầy đủ/Ngắn gọn", mở rộng khung nhập Domain (SRS vẫn mặc định detailLevel='full' ở prompt).
+- **Di nút (f6cbcfb)**: chuyển "Gen All TC / Generate Test Cases" từ góc trên phải xuống **cuối panel Requirement**.
+- **Rename app (f6cbcfb)**: tauri.conf + AppHeader hiển thị → "QA_Assistant" (do Gemini).
+- **Scroll bảng TC ngang (CHƯA commit)**: `.tc-table-wrapper` `max-height: 65vh` + `overflow: auto` → bảng cuộn NỘI BỘ, **thanh cuộn ngang luôn thấy được** (không phải kéo hết TC mới thấy); `.tc-table th` **sticky** nền solid (`--bg-card2`) khi cuộn dọc. Root cause thanh ngang khuất: `.main` chỉ `min-height` → cả trang cuộn dọc, thanh ngang nằm ở đáy bảng dài.
+- **Phân trang bảng TC (CHƯA commit)**: `PAGE_SIZE=20`; thanh "‹ Trước · Trang X/Y · N TC · Sau ›" (chỉ hiện >1 trang); **GIỮ INDEX TUYỆT ĐỐI** cho edit/xóa (`idx = pageStart + i`) — điểm dễ sai nhất; `currentPage` clamp; đổi trang cuộn wrapper về đầu.
+
+### 1b. Thay đổi từ IDE Gemini turn cuối (CHƯA commit, Claude CHƯA review kỹ)
+- `testcase-quality.js`: thêm `sortTestCases` (sắp xếp TC — chưa rõ tiêu chí sort, cần verify).
+- `main.jsx`: `generate()` + `handleSaveEditedTestCases` gọi `sortTestCases` trước khi lưu/hiển thị; nút "Lưu thay đổi" luôn hiện (kể cả 0 TC).
+- `TestCaseTable.jsx`: `getNextTestCaseId` (tự sinh TC ID theo prefix module khi Thêm dòng); empty-state row khi node chưa có TC.
+- `OutputPanel.jsx`: render bảng TC (rỗng) ngay cả khi chưa có output → cho thêm TC thủ công trên node trống.
+→ Hợp lý nhưng do tool khác làm; session sau nên review logic + test trước khi tin.
+
+### 2. File đã sửa
+- `src/web/index.css` — Claude: scroll 65vh + sticky header; f6cbcfb: palette/font/scrollbar.
+- `src/web/components/output/TestCaseTable.jsx` — Claude: phân trang; Gemini: auto-ID + empty-state.
+- `src/web/components/output/OutputPanel.jsx` — Gemini: empty-state (render bảng khi 0 output).
+- `src/web/main.jsx` — Claude (f6cbcfb): di nút; Gemini: sort TC + nút Lưu luôn hiện.
+- `src/web/features/testcase/testcase-quality.js` — Gemini: `sortTestCases`.
+- `src/web/components/tree/TreeNode.jsx`, `layout/ProjectSidebar.jsx`, `controls/SkillOptions.jsx`, `layout/AppHeader.jsx`, `src-tauri/tauri.conf.json` — trong f6cbcfb.
+
+### 3. Quyết định quan trọng
+- **XUNG ĐỘT ĐA CÔNG CỤ (quan trọng nhất)**: IDE Gemini đang sửa cùng working tree. User chốt **Claude sở hữu CSS (index.css)** → session sau: user nên DỪNG Gemini sửa index.css để không đè bản Claude đã push. Các file JSX (TestCaseTable/OutputPanel/main) Gemini vẫn đụng → **luôn ĐỌC LẠI file trước khi sửa** (đã gặp nhiều lần file đổi giữa các lượt).
+- Root cause font (xem 1). Root cause scroll ngang (xem 1).
+- Commit chiến lược: "commit tất cả" theo yêu cầu user (gộp cả thay đổi Gemini + Claude) — f6cbcfb là mốc gần nhất đã push lên `hanh-v2` (GitHub honghanh426417/AI-Agent-Tester).
+
+### 4. Lỗi còn lại / chưa hoàn tất
+- **CHƯA commit**: scroll bảng + phân trang (Claude) + sort/auto-ID/empty-state (Gemini) — toàn bộ since f6cbcfb còn trong working tree.
+- **CHƯA click-test UI thật** (font, palette, scroll 65vh + sticky, phân trang, auto-ID, sort). Chỉ `npm run build` pass.
+- `sortTestCases` + `getNextTestCaseId` do Gemini viết — Claude CHƯA đọc kỹ; cần verify sort không phá thứ tự/ID mong muốn + auto-ID không trùng.
+- Xung đột đa công cụ vẫn tiềm ẩn.
+- (Tồn từ trước) backend đang chạy CHƯA nạp `lark.service.js` Status-order (sửa sau lần restart) — restart nếu push Lark. TC chưa auto-gán `stage` (Known Issue #8).
+
+### 5. Test đã chạy
+- `npm run build` (Vite) — PASS sau mỗi thay đổi (cuối ~285kb JS).
+- Turn này chủ yếu UI → không thêm logic test. Test cũ (gencode 17, export 10, release-check 13, gating 11) vẫn còn ở scratchpad (ngoài repo).
+
+### 6. Lệnh cần chạy lại (Windows)
+```powershell
+cd d:\HANH_TEST_AI\AI-Agent-Tester
+# Frontend (Vite) HMR live → hard-refresh Ctrl+Shift+R.
+# Backend chỉ cần restart nếu push Lark (lark.service Status-order chưa nạp):
+netstat -ano | findstr :3001
+npm start
+npm run dev
+# Commit phần chưa commit lên hanh-v2 (đã track origin):
+git add -A -- . ':!.claude'   # hoặc: git add src
+git commit -m "..."; git push
+```
+
+### 7. Task tiếp theo được khuyến nghị
+- **Commit + push** scroll bảng + phân trang + review thay đổi Gemini (sort/auto-ID/empty-state) lên `hanh-v2`.
+- **Click-test UI thật** toàn bộ.
+- **Review + verify** `sortTestCases` (sort theo gì?) và `getNextTestCaseId` (không trùng ID).
+- Điều phối để CHỈ 1 công cụ sửa CSS/UI (tránh đè nhau).
+
+### 8. Điều KHÔNG được làm ở session sau
+- KHÔNG để Claude + IDE Gemini cùng sửa `index.css` — Claude sở hữu CSS; user dừng Gemini trên file này.
+- Bảng TC phân trang: BẮT BUỘC dùng **index tuyệt đối** (`idx = pageStart + i`) cho sửa/xóa — dùng index trang (page-relative) sẽ sửa/xóa NHẦM dòng ở trang > 1.
+- KHÔNG đổi TÊN biến `:root` (chỉ đổi giá trị) — component tham chiếu tên biến hiện tại.
+- Giữ font stack có **Segoe UI** fallback (Plus Jakarta/Inter chưa import; nếu bỏ Segoe → chữ về Arial generic).
+- Giữ `max-height` khung bảng TC (bỏ → thanh cuộn ngang lại khuất dưới đáy).
+- KHÔNG revert `sortTestCases`/`getNextTestCaseId`/empty-state (thay đổi có chủ đích của tool khác) trừ khi user yêu cầu — nhưng nên review trước khi build tiếp lên chúng.
+- Giữ nguyên mọi điều cấm các phiên trước (không tạo test_plans/route song song, không bỏ filter internal SkillSidebar, giữ Status gần cuối + cột Screen/Feature, `toCsv` cần nodePath, v.v.).
+
+---
+
+## Session trước: 2026-07-08 (máy Windows, phiên tối ưu & UI) — Tối ưu token + Tinh giản UI + Cột TC (M/S/F+Status) + Kéo rộng cột
 
 Nối tiếp phiên System Layer/Test Plan (bên dưới). Trong phiên user báo lỗi **`QUOTA_EXCEEDED`** khi test → chẩn đoán = Gemini free-tier hết hạn mức (KHÔNG phải bug, chỉ có Gemini có key nên không fallback). Từ đó user yêu cầu loạt cải tiến tối ưu token + tinh chỉnh UI/bảng TC. Tất cả đã build + test logic; **CHƯA click-test UI thật** (user tự test).
 

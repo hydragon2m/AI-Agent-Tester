@@ -32,7 +32,7 @@ function PlanBadge({ template, status }) {
   );
 }
 
-export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, level = 0 }) {
+export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, onExportFile, onExportLark, level = 0 }) {
   const [expanded, setExpanded] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -83,6 +83,8 @@ export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename,
             <div className="tree-context-menu">
               {canAdd && <button onClick={() => runAction(() => onAdd(node.id, nextType))}>+ Thêm {nextType}</button>}
               <button onClick={() => runAction(() => onRename(node))}>✎ Đổi tên</button>
+              {onExportFile && <button onClick={() => runAction(() => onExportFile({ id: node.id, name: node.name, type: node.type }))}>⤓ Export Excel/CSV</button>}
+              {onExportLark && <button onClick={() => runAction(() => onExportLark({ id: node.id, name: node.name, type: node.type }))}>🦊 Export to Lark</button>}
               <button className="text-red" onClick={() => runAction(() => onDelete(node))}>× Xóa</button>
             </div>
           )}
@@ -91,7 +93,7 @@ export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename,
       {hasChildren && expanded && (
         <div className="tree-children">
           {children.map(child => (
-            <TreeNode key={child.id} node={child} nodes={nodes} activeNodeId={activeNodeId} onSelect={onSelect} onAdd={onAdd} onRename={onRename} onDelete={onDelete} level={level + 1} />
+            <TreeNode key={child.id} node={child} nodes={nodes} activeNodeId={activeNodeId} onSelect={onSelect} onAdd={onAdd} onRename={onRename} onDelete={onDelete} onExportFile={onExportFile} onExportLark={onExportLark} level={level + 1} />
           ))}
         </div>
       )}

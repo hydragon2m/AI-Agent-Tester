@@ -61,7 +61,28 @@ function SrsCompleteBanner({ signature }) {
 }
 
 export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading, onUpdateTestCases, nodePath }) {
-  if (!output && !rawOutput) return <div className="empty-state table-empty">Chưa có output.</div>;
+  if (!output && !rawOutput) {
+    if (activeSkill === 'testcase') {
+      return (
+        <TestCaseOutput
+          result={{ testCases: [] }}
+          rawOutput=""
+          review={review}
+          reviewDecisions={reviewDecisions}
+          newSuggestionDecisions={newSuggestionDecisions}
+          onToggleDecision={onToggleDecision}
+          onToggleSuggestion={onToggleSuggestion}
+          onAcceptAllReview={onAcceptAllReview}
+          onKeepAllReview={onKeepAllReview}
+          onApplyReview={onApplyReview}
+          onDismissReview={onDismissReview}
+          onUpdateTestCases={onUpdateTestCases}
+          nodePath={nodePath}
+        />
+      );
+    }
+    return <div className="empty-state table-empty">Chưa có output.</div>;
+  }
   if (activeSkill === 'testcase') {
     return (
       <TestCaseOutput

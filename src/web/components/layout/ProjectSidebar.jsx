@@ -7,7 +7,7 @@ import { fetchSystems, createSystemApi, updateSystemApi, deleteSystemApi } from 
 // - Systems lấy từ /api/systems (state nội bộ sidebar, tự reload khi CRUD system).
 // - Project nhóm theo node.systemId; project không có system (hoặc system đã xóa) → nhóm "Chưa gán".
 // - Tạo project dưới 1 system: onCreateProject(systemId) nếu có (modal — Step 8), else fallback prompt onAdd.
-export function ProjectSidebar({ nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, onExport, onImport, onCreateProject }) {
+export function ProjectSidebar({ nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, onExport, onImport, onCreateProject, onExportFile, onExportLark }) {
   const [collapsed, setCollapsed] = useState(false);
   const { width, resizing, startResize } = useResizableWidth({ storageKey: 'sidebar-width-project', defaultWidth: 220, min: 180, max: 460 });
   const [systems, setSystems] = useState([]);
@@ -53,7 +53,7 @@ export function ProjectSidebar({ nodes, activeNodeId, onSelect, onAdd, onRename,
     else onAdd(null, 'project', systemId || null); // fallback: prompt-based (nếu chưa mắc wizard)
   }
 
-  const treeProps = { nodes, activeNodeId, onSelect, onAdd, onRename, onDelete };
+  const treeProps = { nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, onExportFile, onExportLark };
 
   return (
     <aside className={`project-sidebar ${collapsed ? 'collapsed' : ''} ${resizing ? 'resizing' : ''}`} style={collapsed ? undefined : { width }}>
@@ -75,6 +75,8 @@ export function ProjectSidebar({ nodes, activeNodeId, onSelect, onAdd, onRename,
             onAddProject={() => addProject(sys.id, sys.name)}
             onRenameSystem={() => handleRenameSystem(sys)}
             onDeleteSystem={() => handleDeleteSystem(sys)}
+            onExportSystemFile={onExportFile ? () => onExportFile({ id: sys.id, name: sys.name, type: 'system' }) : undefined}
+            onExportSystemLark={onExportLark ? () => onExportLark({ id: sys.id, name: sys.name, type: 'system' }) : undefined}
           />
         ))}
 
@@ -107,7 +109,7 @@ export function ProjectSidebar({ nodes, activeNodeId, onSelect, onAdd, onRename,
 }
 
 // 1 nhóm System (hoặc nhóm "Chưa gán" khi system.id === null → không có nút rename/delete).
-function SystemGroup({ system, projects, treeProps, onAddProject, onRenameSystem, onDeleteSystem }) {
+function SystemGroup({ system, projects, treeProps, onAddProject, onRenameSystem, onDeleteSystem, onExportSystemFile, onExportSystemLark }) {
   const [expanded, setExpanded] = useState(true);
   const isReal = system.id != null;
   return (
@@ -133,6 +135,12 @@ function SystemGroup({ system, projects, treeProps, onAddProject, onRenameSystem
         </span>
         <button type="button" title="Tạo Project trong nhóm này" onClick={onAddProject}
           style={sysBtnStyle}>+P</button>
+        {isReal && onExportSystemFile && (
+          <button type="button" title="Export Excel/CSV toàn hệ thống" onClick={onExportSystemFile} style={sysBtnStyle}>⤓</button>
+        )}
+        {isReal && onExportSystemLark && (
+          <button type="button" title="Export Lark Base toàn hệ thống" onClick={onExportSystemLark} style={sysBtnStyle}>🦊</button>
+        )}
         {isReal && (
           <>
             <button type="button" title="Đổi tên hệ thống" onClick={onRenameSystem} style={sysBtnStyle}>✎</button>
