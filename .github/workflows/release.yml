@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'windows-latest'
+          - platform: 'windows-2022'
             pkg_target: 'node20-win-x64'
             bin_name: 'hydra-server.exe'
             tauri_args: ''
@@ -63,13 +63,11 @@ jobs:
             patchelf
 
       - name: Setup MSVC environment (Windows only)
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-2022'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Node.js dependencies
         run: npm ci
-        env:
-          npm_config_msvs_version: 2022
 
       - name: Create binaries directory
         run: mkdir -p src-tauri/binaries
