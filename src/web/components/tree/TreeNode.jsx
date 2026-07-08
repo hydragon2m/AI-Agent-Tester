@@ -1,7 +1,27 @@
 import { useState, useRef, useEffect } from 'react';
+import { getTemplate, templateShort } from '../../features/skills/strategy-templates';
 
 const NODE_TYPES = ['project', 'module', 'screen', 'feature'];
 const NEXT_TYPE = { project: 'module', module: 'screen', screen: 'feature', feature: 'feature' };
+
+// Badge trạng thái Test Plan cho node project — GỌN (mã ngắn), nhãn đầy đủ ở tooltip:
+//   đã cấu hình → "✓NEW/ADD/FIX/VER/FULL" (xanh);  chưa → "Draft" (vàng).
+function PlanBadge({ template, status }) {
+  const configured = status === 'configured' || status === 'approved';
+  const fullLabel = getTemplate(template)?.label || 'Test plan';
+  const color = configured ? '#2ecc71' : '#c9a227';
+  return (
+    <span
+      title={configured ? `Test plan: ${fullLabel} (đã cấu hình)` : 'Chưa cấu hình kế hoạch test'}
+      style={{
+        marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '0 5px', borderRadius: 10,
+        border: `1px solid ${color}`, color, whiteSpace: 'nowrap', flexShrink: 0,
+      }}
+    >
+      {configured ? `✓${templateShort(template)}` : 'Draft'}
+    </span>
+  );
+}
 
 export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename, onDelete, level = 0 }) {
   const [expanded, setExpanded] = useState(true);
@@ -41,6 +61,7 @@ export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename,
           <span className="tree-node-name" title={node.name}>
             {node.name}{node.type === 'module' && node.abbreviation ? ` (${node.abbreviation})` : ''}
           </span>
+          {node.type === 'project' && <PlanBadge template={node.planTemplate} status={node.planStatus} />}
         </button>
         <div className={`tree-node-menu ${menuOpen ? 'open' : ''}`} ref={menuRef}>
           <button

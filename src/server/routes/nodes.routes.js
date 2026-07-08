@@ -10,6 +10,9 @@ router.get('/', async (req, res) => {
       id: n.id,
       parentId: n.parent_id,
       projectId: n.project_id,
+      systemId: n.system_id || null,
+      planTemplate: n.plan_template || '',
+      planStatus: n.plan_status || null,
       name: n.name,
       type: n.type,
       context: n.context || '',
@@ -24,13 +27,13 @@ router.get('/', async (req, res) => {
 
 // Add Node
 router.post('/', async (req, res) => {
-  const { parentId, name, type, context, abbreviation } = req.body;
+  const { parentId, name, type, context, abbreviation, systemId } = req.body;
   if (!name || !['project', 'module', 'screen', 'feature'].includes(type)) {
     return res.status(400).json({ error: 'Invalid node payload' });
   }
   try {
     const id = 'node_' + Date.now().toString();
-    const newNode = await createNode(id, parentId, type, name, context, abbreviation);
+    const newNode = await createNode(id, parentId, type, name, context, abbreviation, systemId);
     res.json(newNode);
   } catch (e) {
     console.error(e);

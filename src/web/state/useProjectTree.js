@@ -36,7 +36,7 @@ export function useProjectTree(onToast) {
     refreshTree().catch(e => onToast?.(`Lỗi tải tree: ${e.message}`));
   }, []);
 
-  async function createNode(parentId, type) {
+  async function createNode(parentId, type, systemId) {
     const name = window.prompt(`Tên ${type}:`);
     if (!name?.trim()) return;
     const context = window.prompt('Context/description:', '') || '';
@@ -44,7 +44,8 @@ export function useProjectTree(onToast) {
     if (type === 'module') {
       abbreviation = (window.prompt('Viết tắt module (dùng để đánh số TC ID, ví dụ INV):', '') || '').trim().toUpperCase();
     }
-    await createNodeApi({ parentId, type, name: name.trim(), context, abbreviation });
+    // systemId chỉ có ý nghĩa với node project (gắn project vào 1 System); node khác bỏ qua.
+    await createNodeApi({ parentId, type, name: name.trim(), context, abbreviation, systemId });
     await refreshTree();
     onToast?.('Đã tạo node');
   }

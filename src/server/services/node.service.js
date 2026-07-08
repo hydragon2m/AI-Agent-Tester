@@ -2,14 +2,24 @@ const { dbRun, dbGet, dbAll } = require('../db/db_manager');
 const { createProject, updateProject, deleteProject } = require('./project.service');
 
 async function getNodes() {
-  return dbAll('SELECT * FROM nodes ORDER BY sort_order ASC');
+  // LEFT JOIN projects để lấy system_id cho node project (project node id === projects.id).
+  // plan_template/plan_status: từ test_strategies mới nhất của project (dùng cho badge sidebar).
+  // Node không phải project → không match → NULL.
+  return dbAll(
+    `SELECT n.*, p.system_id AS system_id,
+       (SELECT ts.template FROM test_strategies ts WHERE ts.project_id = n.id ORDER BY ts.created_at DESC LIMIT 1) AS plan_template,
+       (SELECT ts.status   FROM test_strategies ts WHERE ts.project_id = n.id ORDER BY ts.created_at DESC LIMIT 1) AS plan_status
+       FROM nodes n
+       LEFT JOIN projects p ON p.id = n.id
+      ORDER BY n.sort_order ASC`
+  );
 }
 
 async function getNodeById(id) {
   return dbGet('SELECT * FROM nodes WHERE id = ?', [id]);
 }
 
-async function createNode(id, parentId, type, name, context, abbreviation) {
+async function createNode(id, parentId, type, name, context, abbreviation, systemId) {
   let projectId = null;
   if (parentId) {
     const parent = await dbGet('SELECT project_id, type FROM nodes WHERE id = ?', [parentId]);
@@ -18,7 +28,7 @@ async function createNode(id, parentId, type, name, context, abbreviation) {
     }
   } else if (type === 'project') {
     projectId = id;
-    await createProject(id, name, context);
+    await createProject(id, name, context, systemId); // systemId chỉ áp dụng cho node project (gốc)
   }
 
   await dbRun(
@@ -27,7 +37,11 @@ async function createNode(id, parentId, type, name, context, abbreviation) {
     [id, projectId, parentId || null, type, name, context || '', abbreviation || '', new Date().toISOString()]
   );
 
-  return { id, parentId: parentId || null, projectId, name, type, context: context || '', abbreviation: abbreviation || '' };
+  return {
+    id, parentId: parentId || null, projectId, name, type,
+    context: context || '', abbreviation: abbreviation || '',
+    systemId: type === 'project' ? (systemId || null) : null,
+  };
 }
 
 async function updateNode(id, name, context, abbreviation) {

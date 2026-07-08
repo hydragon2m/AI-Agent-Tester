@@ -5,7 +5,88 @@
 
 ---
 
-## Session gần nhất: 2026-07-07 chiều (máy Windows) — Fix vòng lặp hỏi SRS + Phân rã Feature (đổi từ tự động sang thủ công)
+## Session gần nhất: 2026-07-08 (máy Windows) — Fix vòng hỏi SRS (cho phép hỏi nhiều vòng) + Build feature MỚI: Test Strategy (F6+F7)
+
+Session gồm 2 mảng chính: (A) chỉnh lại hành vi hỏi làm rõ của skill SRS theo phản hồi user; (B) build tính năng mới **Test Strategy Generator** (F6 skill + F7 UI/table) gắn tại project node theo đúng sơ đồ thiết kế user cung cấp, rồi sửa UI để project node CHỈ hiện màn Test Strategy và xác định nguyên nhân user báo "gen strategy không chạy".
+
+### 1. Task đã hoàn thành
+- **(A) Sửa hành vi hỏi làm rõ SRS**: yêu cầu trước "hỏi hết 1 lần" bị hiểu sai thành "chỉ được hỏi ĐÚNG 1 lần rồi bắt buộc chốt SRS + dùng `[GIẢ ĐỊNH]` cho mọi thứ còn thiếu". Đúng ý user: mỗi VÒNG hỏi vẫn phải liệt kê HẾT câu hỏi trong 1 lượt (giữ nguyên), NHƯNG sau khi user trả lời mà vẫn còn mơ hồ **business-critical** (trạng thái/state, validation, phân quyền, ràng buộc nghiệp vụ, số liệu) thì AI ĐƯỢC PHÉP và NÊN hỏi tiếp — lặp qua nhiều vòng đến khi hết khúc mắc; `[GIẢ ĐỊNH]` chỉ dùng cho chi tiết cosmetic không ảnh hưởng viết TC, KHÔNG dùng để né hỏi. Sửa ở `skill-registry.js` (system prompt SRS quy tắc #2 + Bước 0 ngoại lệ + viết lại `buildFinalizePrompt`) và `main.jsx#handleClarificationSubmit` (toast phân biệt "cần trả lời tiếp" vs "SRS hoàn chỉnh"). Frontend nhiều vòng vốn đã hỗ trợ sẵn (parse lại câu hỏi trên output mới nhất mỗi vòng) nên không phải sửa thêm.
+- **(B) Build Test Strategy F6+F7 (tính năng MỚI, 100% additive)**: gắn tại **project node**, 1 strategy/project (revision như skill_runs). Gồm:
+  - **F6 — skill nội bộ `teststrategy`** (`skill-registry.js`): input = project context + template → output JSON `{ summary, stages[], executionPlan, releaseGate }`. Gọi kèm `expectJson: true` (dùng lại cơ chế chống JSON cắt cụt của session trước). Ẩn khỏi sidebar giống `srsdecomposer` (filter trong `SkillSidebar.jsx`).
+  - **2 trục stage tách biệt** (theo user chốt): Trục 1 = hoạt động test (6 activity toggle ON/OFF: api, smoke, manual, regression, performance, security); Trục 2 = `stageType`/phase enum (new_feature, integration, pre_release, post_release, regression). Định nghĩa dùng chung ở `strategy-templates.js` + `normalizeStages()` phòng thủ (luôn đủ 6 dòng dù AI trả thiếu/thừa key).
+  - **4 template quyết định bộ stage bật mặc định**: new_product (api/smoke/manual/perf/security), feature_addition (api/smoke/manual/regression), hotfix (smoke/manual/regression), custom (tất cả OFF).
+  - **Backend**: table mới `test_strategies` (schema.sql, tự tạo lúc boot IF NOT EXISTS) + `strategy.service.js` (CRUD, mỗi approve = 1 revision) + `strategy.routes.js` mount `/api/strategies` (app.js).
+  - **UI**: `StrategyPanel.jsx` — 3 màn inline: Generate (chọn template) → Review (toggle ON/OFF từng stage + Approve) → Current (read-only + placeholder tiến độ F8/F9). `strategy.api.js` gọi backend. Wire vào `main.jsx` (`handleGenerateStrategyDraft`).
+- **(C) Project node CHỈ hiện màn Test Strategy** (user yêu cầu sau khi thấy nó chạy): khi `activeNode.type === 'project'` → render `StrategyPanel` INLINE thay cho toàn bộ phần skill; ẩn `SkillSidebar` (skill list + History), 2 panel Requirement/Output, các nút Generate/Gen All TC. Node khác project giữ nguyên 100%. (Ban đầu làm dạng modal + nút "🎯 Test Strategy", sau đổi hẳn sang panel inline theo yêu cầu — đã xóa `StrategyModal.jsx`, thay bằng `StrategyPanel.jsx`.)
+
+### 2. File đã sửa / tạo mới
+- `src/server/db/schema.sql` — thêm table `test_strategies` (+ index). Không FK để tránh ràng buộc cascade; `db_manager.initDatabase` chạy schema mỗi lần boot nên table tự tạo cho cả DB cũ.
+- `src/server/services/strategy.service.js` (**mới**) — getLatestStrategy / getStrategyById / createStrategy / updateStrategy / deleteStrategy.
+- `src/server/routes/strategy.routes.js` (**mới**) — GET (`?projectId=`), POST, PUT `/:id`, DELETE `/:id`.
+- `src/server/app.js` — import + mount `/api/strategies`.
+- `src/web/features/skills/strategy-templates.js` (**mới**) — STAGE_ACTIVITIES, STAGE_TYPES, STRATEGY_TEMPLATES, getTemplate/activityLabel/stageTypeLabel/buildDefaultStages/normalizeStages.
+- `src/web/features/skills/skill-registry.js` — (A) sửa system prompt SRS + `buildFinalizePrompt`; (B) thêm skill `teststrategy` + import từ strategy-templates.
+- `src/web/components/layout/SkillSidebar.jsx` — filter thêm `key !== 'teststrategy'` (ẩn khỏi sidebar).
+- `src/web/backend-api/strategy.api.js` (**mới**) — fetch/create/update/delete strategy.
+- `src/web/components/strategy/StrategyPanel.jsx` (**mới**) — panel inline 3 màn. (`StrategyModal.jsx` đã tạo rồi xóa trong cùng session.)
+- `src/web/main.jsx` — (A) toast clarification; (C) `isProjectNode`, render `StrategyPanel` inline + ẩn skill UI cho project node, `handleGenerateStrategyDraft` + `DEMO_STRATEGY`.
+
+### 3. Quyết định quan trọng
+- **Test Strategy lưu ở table riêng `test_strategies`, KHÔNG nhét vào `skill_runs`** — vì strategy là dữ liệu mutable (toggle stage, approve, sau này track tiến độ), khác bản chất append-only của skill_runs.
+- **`teststrategy` là skill nội bộ, PHẢI ẩn khỏi sidebar** (như `srsdecomposer`) — nếu user tự chọn qua sidebar, OutputPanel không render nổi JSON dạng này → lặp lại bug "[object Object]".
+- **Đổi Test Strategy từ modal → panel inline** theo yêu cầu user (project node chỉ hiện màn này). Đã xóa `StrategyModal.jsx`.
+- **2 trục stage tách biệt** (activity vs stageType) là quyết định thiết kế user chốt trực tiếp — không gộp làm 1.
+- **Template quyết định bộ stage bật mặc định**, AI điền chi tiết (stageType, trigger, skills, entry/exit, execution plan). `normalizeStages` luôn ép về đủ 6 activity đúng key để UI ổn định.
+- **Phạm vi session = F6+F7**. F8 (dashboard %/status theo stage) và F9 (release gate auto Go/No-go) CHƯA làm vì cần status TC thật đồng bộ từ Lark (F3 — chưa build). Màn Current hiện chỉ có placeholder ghi rõ điều này.
+
+### 4. Lỗi còn lại / chưa hoàn tất
+- **CHƯA click-test qua UI trình duyệt thật** toàn bộ luồng Test Strategy (mở panel → chọn template → Sinh → toggle → Approve → mở lại thấy Current). Đã verify từng tầng bên dưới (build, route HTTP, AI JSON, CRUD) nhưng chưa bấm tay trên browser (không có Playwright). **Bài học project: build pass ≠ chạy đúng UI** — user cần bấm thử 1 lượt.
+- Đánh số roadmap: sơ đồ user dùng F6=Strategy skill, F7=Strategy UI, nhưng `CODEBASE-STATE.md` cũ có F6="Multi-user + phân quyền". Đã thêm mục Test Strategy vào roadmap CODEBASE-STATE, giữ nguyên các F cũ (không đụng) — lưu ý số F6-F9 trong HANDOFF/sơ đồ là của Test Strategy, khác bảng roadmap gốc.
+- Về hành vi hỏi SRS nhiều vòng: chưa test end-to-end nhiều vòng (2-3 vòng liên tiếp) qua UI thật trong session này — mới verify ở tầng prompt + build.
+
+### 5. Test đã chạy
+- `npm run build` (Vite) — pass sau tất cả các lần sửa (67 modules, +3 module mới).
+- `node --check` toàn bộ file backend mới (`strategy.service.js`, `strategy.routes.js`, `app.js`) — pass.
+- **Schema**: chạy `schema.sql` qua ĐÚNG logic split của `db_manager` trên DB in-memory (11 statements) — table `test_strategies` đủ 13 cột + index + insert/read round-trip OK. Không đụng DB thật.
+- **HTTP CRUD end-to-end** trên router thật + service thật + DB thật (Express port tạm 3999, KHÔNG đụng backend :3001): GET rỗng→null, POST tạo (auto set `approved_at`), GET latest, PUT toggle, GET thiếu param→400, DELETE cleanup. Đã xóa row test → DB thật sạch.
+- **Gọi AI thật (Gemini) cho `teststrategy`** qua backend đang chạy (`/api/ai/generate`, expectJson): HTTP 200, JSON hợp lệ, đủ 6 stage đúng key, `enabled` khớp template feature_addition, có stageType + priorityOrder + releaseGate. → luồng gen strategy hoạt động.
+- File script test tạm nằm trong scratchpad (ngoài repo), KHÔNG commit — `git status` chỉ có các file nguồn dự kiến + `.claude/` (có sẵn từ đầu session).
+
+### 6. Lệnh cần chạy lại (Windows) — QUAN TRỌNG
+```powershell
+cd d:\HANH_TEST_AI\AI-Agent-Tester
+
+# LUÔN kiểm tra backend đang chạy có phải bản MỚI không trước khi kết luận "lỗi":
+netstat -ano | findstr :3001
+# Test route mới có sống chưa (400 = route đã có; 404 = backend CŨ, phải restart):
+#   curl -s -o NUL -w "%{http_code}" http://localhost:3001/api/strategies
+
+# Nếu backend là bản cũ (khởi động trước khi sửa code) → kill PID rồi chạy lại:
+npm start        # backend Express -> http://localhost:3001
+npm run dev      # frontend Vite   -> http://localhost:5173
+```
+> **Root cause user báo "gen strategy không chạy" trong session này**: backend đang chạy lúc đó là bản CŨ (khởi động trước khi thêm route) → `/api/strategies` trả 404 khi panel mở (fetch) và khi Approve. Sau khi backend được restart kèm code mới thì route sống (đã verify 400/200) và gen AI chạy OK. **Đây là lần thứ N trong dự án bug "ảo" chỉ do backend cũ chưa reload — luôn `netstat`/probe route trước khi kết luận.**
+
+### 7. Task tiếp theo được khuyến nghị
+- **User bấm thử luồng Test Strategy trên UI thật** (hard refresh Ctrl+Shift+R để nạp frontend mới đã build): project node → chọn template → Sinh → toggle → Approve → mở lại thấy Current. Đây là bước duy nhất chưa verify.
+- **F8 — Stage progress tracking**: cần F3 (Lark → Tool status sync) trước để có status TC thật. Khi có, tính % pass/bug open theo stage, hiển thị ở màn Current (đang là placeholder).
+- **F9 — Release readiness auto-check**: dựa trên F8, tính Go/No-go (đủ exit criteria các stage enabled + 0 bug P1...).
+- Cân nhắc: cho phép **override strategy ở cấp module/screen** (schema đã có `node_id`, hiện chỉ dùng ở cấp project) — theo ý "kế thừa xuống module/screen, override từng cấp" trong sơ đồ.
+- Test lại luồng hỏi SRS nhiều vòng (2-3 vòng liên tiếp) qua UI thật để chắc AI hỏi tiếp đúng khi còn mơ hồ business-critical.
+
+### 8. Điều KHÔNG được làm ở session sau
+- KHÔNG bỏ `key !== 'teststrategy'` (và `key !== 'srsdecomposer'`) trong `SkillSidebar.jsx` — sẽ lộ skill nội bộ ra sidebar → bug "[object Object]".
+- KHÔNG xóa `teststrategy` khỏi `SKILLS` registry — `StrategyPanel`/`handleGenerateStrategyDraft` cần `SKILLS.teststrategy.system`/`.buildPrompt`.
+- KHÔNG đổi enum 2 trục stage (6 activity key + 5 stageType) mà không cập nhật đồng thời `strategy-templates.js`, prompt trong `skill-registry.js`, và `normalizeStages` — 3 nơi phải khớp key.
+- KHÔNG chuyển Test Strategy về lại dạng modal / thêm lại nút "🎯 Test Strategy" — user đã chốt panel inline, project node chỉ hiện màn này.
+- KHÔNG hạ `maxOutputTokens` nhánh `expectJson` (giữ nguyên từ session trước) — strategy JSON cũng dựa vào đó.
+- KHÔNG kết luận feature "không chạy" chỉ vì test qua backend :3001 đang chạy sẵn — LUÔN probe route mới (`/api/strategies` phải trả 400 khi thiếu param) để chắc backend là bản mới; nếu 404 thì restart backend.
+- KHÔNG dùng `[GIẢ ĐỊNH]` trong SRS để né các thiếu sót business-critical — chỉ dùng cho chi tiết cosmetic (đã sửa system prompt theo hướng này).
+- Giữ nguyên các quy tắc cấm của session trước bên dưới (Phân rã Feature thủ công, `refreshTree` export, `parseClarificationQuestions` dùng chung...).
+
+---
+
+## Session trước: 2026-07-07 chiều (máy Windows) — Fix vòng lặp hỏi SRS + Phân rã Feature (đổi từ tự động sang thủ công)
 
 User test lại sau session buổi sáng (xem "Session trước" bên dưới) và báo 2 chức năng đã build từ trước nhưng không hoạt động đúng: (1) SRS hỏi nhiều lượt thay vì hỏi hết 1 lần, gen lại rất chậm vì phân tích lại từ đầu; (2) Auto Decompose Feature (bóc tách SRS thành các Feature con) không thấy chạy.
 

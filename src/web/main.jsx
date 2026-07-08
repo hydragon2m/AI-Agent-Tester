@@ -13,8 +13,12 @@ import { LarkLinkModal } from './components/output/LarkLinkModal';
 import { ManualPromptModal } from './components/output/ManualPromptModal';
 import { OutputPanel } from './components/output/OutputPanel';
 import { ProviderSettingsModal } from './components/providers/ProviderSettingsModal';
+import { StrategyPanel } from './components/strategy/StrategyPanel';
+import { CreateProjectModal } from './components/strategy/CreateProjectModal';
 import { DEMO_OUTPUTS, EXAMPLES, SKILLS } from './features/skills/skill-registry';
 import { parseClarificationQuestions } from './features/skills/srs-clarification';
+import { getVisibleSkillIds } from './utils/skill-gating';
+import { fetchStrategyApi } from './backend-api/strategy.api';
 import { toCsv, toLarkClipboardPayload, toMarkdown } from './features/testcase/testcase-export';
 import { parseAiJson, stripCodeFence } from './features/testcase/testcase-parser';
 import { QUALITY_SYSTEM_PROMPT, buildQualityPrompt, buildFinalTestCases } from './features/testcase/testcase-quality';
@@ -119,6 +123,8 @@ function App() {
   const [larkLinking, setLarkLinking] = useState(false);
   const [decomposeResult, setDecomposeResult] = useState(null);
   const [decomposing, setDecomposing] = useState(false);
+  const [createProject, setCreateProject] = useState(null); // { systemId, systemName } | null → mở CreateProjectModal
+  const [activePlan, setActivePlan] = useState(undefined);   // undefined = chưa fetch, null = không có plan, obj = plan
 
   const projectTree = useProjectTree(setToast);
   const providers = useProviderSettings(setToast);
@@ -132,6 +138,40 @@ function App() {
   const skill = SKILLS[workspace.activeSkill];
   const testCases = workspace.output?.testCases || [];
   const skipNextHistorySync = useRef(false);
+
+  // Project node = màn Test Strategy (ẩn hoàn toàn phần skill Requirement/Output).
+  const isProjectNode = projectTree.activeNode?.type === 'project';
+
+  // Skill-gating: danh sách skill được hiện dựa trên node type + test plan của project.
+  // Plan chưa cấu hình → getVisibleSkillIds trả đủ skill (backward-compat).
+  const visibleSkillIds = getVisibleSkillIds(projectTree.activeNode?.type, activePlan);
+  const planConfigured = !!(activePlan && (activePlan.status === 'configured' || activePlan.status === 'approved'));
+
+  // Tải test plan của project chứa node đang chọn (cho gating + banner cảnh báo).
+  useEffect(() => {
+    const node = projectTree.activeNode;
+    if (!node || node.type === 'project' || !node.projectId) { setActivePlan(node && node.type !== 'project' ? null : undefined); return; }
+    let alive = true;
+    setActivePlan(undefined);
+    fetchStrategyApi(node.projectId)
+      .then(p => { if (alive) setActivePlan(p || null); })
+      .catch(() => { if (alive) setActivePlan(null); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectTree.activeNodeId, projectTree.activeNode?.projectId, projectTree.activeNode?.type]);
+
+  // Nếu skill đang chọn bị gating ẩn đi → tự chuyển sang skill hiển thị đầu tiên.
+  useEffect(() => {
+    if (isProjectNode || !visibleSkillIds.length) return;
+    if (!visibleSkillIds.includes(workspace.activeSkill)) workspace.setActiveSkill(visibleSkillIds[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleSkillIds.join(','), isProjectNode, workspace.activeSkill]);
+
+  async function handleProjectCreated(project) {
+    setCreateProject(null);
+    await projectTree.refreshTree();
+    projectTree.setActiveNodeId(project.id);
+  }
 
   const srsMarkdownForActions = workspace.activeSkill === 'srs' ? String(workspace.output || workspace.rawOutput || '') : '';
   const canDecomposeFeatures = Boolean(srsMarkdownForActions.trim())
@@ -443,7 +483,10 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
         const parsed = stripCodeFence(generated.output);
         workspace.setSkillOutput(parsed, generated.output);
         await saveSkillRun(nextRequirement, parsed, generated.output, generated.provider);
-        setToast(`Đã cập nhật SRS bằng ${generated.provider}`);
+        const stillHasQuestions = parseClarificationQuestions(parsed).length > 0;
+        setToast(stillHasQuestions
+          ? `AI cần thêm thông tin — vui lòng trả lời tiếp các câu hỏi mới (${generated.provider})`
+          : `Đã cập nhật SRS hoàn chỉnh bằng ${generated.provider}`);
       } catch (e) {
         setToast(`Lỗi: ${e.message}`);
       } finally {
@@ -530,6 +573,40 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
       setToast(`Lỗi phân tách Feature: ${e.message}`);
       setDecomposeResult({ status: 'error', message: e.message });
     }
+  }
+
+  // Sinh draft Test Strategy bằng AI (F6) — gọi từ StrategyModal. Trả về object
+  // đã parse { summary, stages, executionPlan, releaseGate } để modal review + toggle.
+  const DEMO_STRATEGY = {
+    summary: '(Demo) Chiến lược test cho việc thêm tính năng vào product đã có.',
+    stages: [
+      { key: 'api', activity: 'API Testing', stageType: 'integration', enabled: true, trigger: 'Ngay khi dev xong backend', skills: ['apitest'], entryCriteria: 'Endpoint deploy lên môi trường test', exitCriteria: '100% API TC pass, 0 bug P1' },
+      { key: 'smoke', activity: 'Smoke Test', stageType: 'integration', enabled: true, trigger: 'Khi có build mới', skills: ['testcase'], entryCriteria: 'Build deploy thành công', exitCriteria: 'Toàn bộ smoke TC pass' },
+      { key: 'manual', activity: 'Manual / Functional', stageType: 'new_feature', enabled: true, trigger: 'Sau khi smoke pass', skills: ['testcase', 'uitest'], entryCriteria: 'Smoke đã pass', exitCriteria: 'Full TC pass, bug P1/P2 đã fix' },
+      { key: 'regression', activity: 'Regression', stageType: 'regression', enabled: true, trigger: 'Trước khi release', skills: ['testcase'], entryCriteria: 'Manual đã xong', exitCriteria: 'Bộ regression pass 100%' },
+      { key: 'performance', activity: 'Performance', stageType: 'pre_release', enabled: false, trigger: 'Trên staging trước release', skills: ['performance'], entryCriteria: '', exitCriteria: '' },
+      { key: 'security', activity: 'Security', stageType: 'pre_release', enabled: false, trigger: 'Trên staging trước release', skills: ['security'], entryCriteria: '', exitCriteria: '' },
+    ],
+    executionPlan: {
+      sprintMap: [{ stage: 'api', when: 'Sprint 1' }, { stage: 'manual', when: 'Sprint 2' }],
+      ownerMap: [{ stage: 'api', owner: 'QA API / Dev' }, { stage: 'manual', owner: 'QA Manual' }],
+      priorityOrder: ['api', 'smoke', 'manual', 'regression'],
+    },
+    releaseGate: '(Demo) Release khi API + Smoke + Manual + Regression đều đạt exit criteria, 0 bug P1 open.',
+  };
+
+  async function handleGenerateStrategyDraft(template, note) {
+    const generated = demoMode
+      ? { output: JSON.stringify(DEMO_STRATEGY), provider: 'demo' }
+      : await generateAiOutput({
+          skill: 'teststrategy',
+          systemPrompt: SKILLS.teststrategy.system,
+          userPrompt: SKILLS.teststrategy.buildPrompt(note, buildContext(projectTree.activePath), { template }),
+          nodeId: projectTree.activeNodeId,
+          expectJson: true,
+        });
+    const parsed = parseAiJson(generated.output);
+    return { ...parsed, provider: generated.provider };
   }
 
   async function handleGenAllTC() {
@@ -861,20 +938,24 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           onDelete={handleDeleteNode}
           onExport={exportTree}
           onImport={importTree}
+          onCreateProject={(systemId, systemName) => setCreateProject({ systemId, systemName })}
         />
 
-        <SkillSidebar
-          activeSkill={workspace.activeSkill}
-          setActiveSkill={workspace.setActiveSkill}
-          history={skillHistory.runs}
-          historyLoading={skillHistory.loading}
-          activeHistoryId={activeHistoryId}
-          hasActiveNode={!!projectTree.activeNodeId}
-          onViewHistory={viewHistoryItem}
-          onRenameHistory={renameHistoryItem}
-          onDeleteHistory={deleteHistoryItem}
-          onRestoreHistory={restoreHistoryItem}
-        />
+        {!isProjectNode && (
+          <SkillSidebar
+            activeSkill={workspace.activeSkill}
+            setActiveSkill={workspace.setActiveSkill}
+            history={skillHistory.runs}
+            historyLoading={skillHistory.loading}
+            activeHistoryId={activeHistoryId}
+            hasActiveNode={!!projectTree.activeNodeId}
+            visibleSkillIds={visibleSkillIds}
+            onViewHistory={viewHistoryItem}
+            onRenameHistory={renameHistoryItem}
+            onDeleteHistory={deleteHistoryItem}
+            onRestoreHistory={restoreHistoryItem}
+          />
+        )}
 
         <section className="web-workspace">
           <div className="workspace-header">
@@ -883,17 +964,53 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               <h1>{projectTree.activeNode ? projectTree.activePath.map(n => n.name).join(' / ') : 'Chưa chọn node'}</h1>
               <p>{projectTree.activeNode?.context || 'Chọn hoặc tạo project/module/screen/feature để output có đúng ngữ cảnh.'}</p>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
-                <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
-                  {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
+            {!isProjectNode && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
+                  <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
+                    {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
+                  </button>
+                )}
+                <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
+                  {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
                 </button>
-              )}
-              <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
-                {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
+              </div>
+            )}
+          </div>
+
+          {isProjectNode && (
+            <StrategyPanel
+              projectNode={projectTree.activeNode}
+              onGenerateDraft={handleGenerateStrategyDraft}
+              onToast={setToast}
+              demoMode={demoMode}
+              onPlanChanged={projectTree.refreshTree}
+            />
+          )}
+
+          {!isProjectNode && (
+          <>
+          {projectTree.activeNode && activePlan !== undefined && !planConfigured && projectTree.activeNode.projectId && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                border: '1px solid #c9a227', background: 'rgba(201, 162, 39, 0.10)',
+                padding: '10px 16px', borderRadius: 8, marginBottom: 12,
+              }}
+            >
+              <span style={{ color: '#c9a227', fontWeight: 600, fontSize: 13 }}>
+                ⚠ Dự án chưa có kế hoạch test — skill đang hiển thị đầy đủ mặc định. Cấu hình plan để bật gating theo stage.
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ whiteSpace: 'nowrap' }}
+                onClick={() => projectTree.setActiveNodeId(projectTree.activeNode.projectId)}
+              >
+                Tạo kế hoạch test →
               </button>
             </div>
-          </div>
+          )}
 
           {decomposeResult && workspace.activeSkill === 'srs' && FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
             <div
@@ -1035,6 +1152,8 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               onUpdateTestCases={handleUpdateTestCases}
             />
           </section>
+          </>
+          )}
         </section>
       </main>
 
@@ -1069,6 +1188,15 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           onClose={() => setLarkLinkOpen(false)}
           onConfirm={confirmLarkLink}
           loading={larkLinking}
+        />
+      )}
+      {createProject && (
+        <CreateProjectModal
+          systemId={createProject.systemId}
+          systemName={createProject.systemName}
+          onClose={() => setCreateProject(null)}
+          onCreated={handleProjectCreated}
+          onToast={setToast}
         />
       )}
       {toast && <div className="toast show">{toast}</div>}

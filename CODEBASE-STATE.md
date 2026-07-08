@@ -2,7 +2,7 @@
 
 > **QUAN TRỌNG:** Claude PHẢI đọc file này trước khi sửa bất kỳ code nào.
 > Sau mỗi lần thêm/sửa chức năng thành công → cập nhật file này.
-> Ngày cập nhật cuối: ___
+> Ngày cập nhật cuối: 2026-07-08
 
 ---
 
@@ -154,9 +154,14 @@ User trả lời → [main.jsx] handleClarificationSubmit():
     - Gọi SKILLS.srs.buildFinalizePrompt(previousSrs, answersMarkdown, context)
       — gửi SRS/câu hỏi trước đó + câu trả lời mới, KHÔNG gửi lại toàn bộ input
       gốc để phân tích lại từ đầu (nhanh hơn vòng gen đầu).
-    - System prompt: khi input có heading "### CÂU TRẢ LỜI LÀM RÕ" → BẮT BUỘC
-      viết SRS đầy đủ, KHÔNG hỏi lại câu đã trả lời, chi tiết nhỏ còn thiếu thì
-      tự gắn "[GIẢ ĐỊNH]" thay vì hỏi tiếp — tránh vòng lặp hỏi vô hạn.
+    - System prompt (cập nhật 2026-07-08 — HỎI NHIỀU VÒNG): khi input có heading
+      "### CÂU TRẢ LỜI LÀM RÕ" → TUYỆT ĐỐI không hỏi lại câu đã trả lời. Sau đó:
+      nếu câu trả lời VẪN còn thiếu sót business-critical (state/validation/phân
+      quyền/ràng buộc nghiệp vụ/số liệu) → ĐƯỢC PHÉP chèn lại hộp "[CÂU HỎI LÀM RÕ]"
+      liệt kê hết câu hỏi MỚI trong 1 lượt, chưa viết SRS (lặp qua nhiều vòng đến
+      khi hết khúc mắc). Chỉ khi hết business-critical mới viết SRS đầy đủ; "[GIẢ ĐỊNH]"
+      CHỈ dùng cho chi tiết cosmetic, KHÔNG dùng để né hỏi. Toast ở main.jsx phân
+      biệt "cần trả lời tiếp" vs "SRS hoàn chỉnh".
     ↓
 SRS hoàn chỉnh (không còn hộp câu hỏi) → [OutputPanel.jsx] hiện banner xanh
 "✅ SRS đã hoàn chỉnh" (không tự ẩn như toast).
@@ -428,6 +433,61 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 
 ---
 
+### FLOW 7 — Test Strategy tại Project node (F6+F7, mới 2026-07-08)
+
+```
+User chọn node type="project" trên tree
+    ↓
+★ WORKSPACE CHỈ HIỆN PANEL TEST STRATEGY ★ (main.jsx: isProjectNode → render
+StrategyPanel inline; ẩn SkillSidebar + panel Requirement/Output + nút Generate).
+    ↓
+[StrategyPanel.jsx] on mount: GET /api/strategies?projectId= (strategy.api.js)
+    - Có strategy → view "current" (read-only + trạng thái approved).
+    - Chưa có → view "generate".
+    ↓
+View GENERATE: user chọn 1 trong 4 template (new_product / feature_addition /
+hotfix / custom — strategy-templates.js) + ghi chú tùy chọn → "Sinh Test Strategy"
+    ↓
+[main.jsx] handleGenerateStrategyDraft(template, note):
+    POST /api/ai/generate skill="teststrategy", expectJson:true
+    (systemPrompt/buildPrompt lấy từ SKILLS.teststrategy) → JSON:
+    { summary, stages[], executionPlan{sprintMap,ownerMap,priorityOrder}, releaseGate }
+    → normalizeStages(stages, template) ép về ĐỦ 6 activity đúng key.
+    ↓
+View REVIEW: hiện 6 stage, mỗi stage có toggle ON/OFF + stageType/trigger/entry/exit/skills;
+execution plan + release gate. User bật/tắt → "Approve strategy"
+    ↓
+[StrategyPanel] POST /api/strategies (status="approved") → lưu vào table
+test_strategies (mỗi approve = 1 revision mới, giữ bản cũ) → view "current".
+    ↓
+View CURRENT: các stage đang bật + execution plan + release gate + placeholder
+"Tiến độ %/Go-No-go sẽ có ở TS-F8/F9 khi có Lark status sync (F3)". Nút "Tạo lại".
+```
+
+**2 TRỤC STAGE (không gộp):** Trục 1 = hoạt động test (6 key toggle: api, smoke,
+manual, regression, performance, security). Trục 2 = `stageType`/phase enum
+(new_feature, integration, pre_release, post_release, regression). Định nghĩa dùng
+chung ở `features/skills/strategy-templates.js`.
+
+**Skill `teststrategy` là NỘI BỘ — ẩn khỏi sidebar** (SkillSidebar.jsx filter
+`key !== 'teststrategy'`, giống srsdecomposer) — tự chọn qua sidebar sẽ ra JSON
+OutputPanel không render nổi → bug "[object Object]".
+
+**⛔ KHÔNG ĐƯỢC:**
+- Bỏ filter `key !== 'teststrategy'` trong SkillSidebar.jsx.
+- Đổi 6 activity key / 5 stageType enum mà quên sync 3 nơi: strategy-templates.js,
+  prompt trong skill-registry.js, và normalizeStages.
+- Chuyển Test Strategy về lại dạng modal / thêm nút "🎯 Test Strategy" (đã chốt
+  panel inline, project node chỉ hiện màn này).
+- Nhét strategy vào skill_runs (dùng table riêng test_strategies vì cần mutable).
+- Kết luận "gen strategy lỗi" khi chưa probe route `/api/strategies` (400 khi thiếu
+  param = backend mới; 404 = backend cũ chưa restart).
+
+**CHƯA làm (cần session sau):** TS-F8 (dashboard %/status theo stage) + TS-F9
+(release gate auto) — chờ F3 Lark status sync. UI chưa click-test qua browser thật.
+
+---
+
 ### FLOW TỔNG — Chuỗi hoàn chỉnh
 
 ```
@@ -466,7 +526,8 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 | create-api-testcase | create-api-testcase.md | "tạo TC API từ CURL" | CSV + Postman JSON |
 | ui-testing | ui-testing.md | "/run TC-PM-011" | report + screenshot |
 | api-testing | api-testing.md | "/run-api TC-PM-028" | report + JSON evidence |
-| srsdecomposer | skill-registry.js (`SKILLS.srsdecomposer`) | (internal, tự động — xem FLOW 2b) sau khi Gen SRS xong trên node type="screen" | JSON `[{ name, srsSegment }]` |
+| srsdecomposer | skill-registry.js (`SKILLS.srsdecomposer`) | (internal, thủ công — xem FLOW 2b) nút "Phân rã thành Feature" trên node module/screen | JSON `[{ name, srsSegment }]` |
+| teststrategy | skill-registry.js (`SKILLS.teststrategy`) | (internal — xem FLOW 7) nút trên StrategyPanel tại project node, KHÔNG hiện ở sidebar | JSON `{ summary, stages[], executionPlan, releaseGate }` |
 
 ---
 
@@ -481,6 +542,10 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 | F4 | TC Snippet library (reuse) | 📋 Planned | CRUD + tag nghiệp vụ |
 | F5 | TC Diff khi regenerate | 📋 Planned | Compare revision, highlight |
 | F6 | Multi-user + phân quyền | 📋 Planned | QA vs QA Lead roles |
+| TS-F6 | Test Strategy Generator (skill `teststrategy`) | ✅ Code done | Sinh JSON stages/plan theo template, verify AI thật OK |
+| TS-F7 | Test Strategy UI + table `test_strategies` | ✅ Code done | Panel inline tại project node; CHƯA click-test UI browser |
+| TS-F8 | Stage progress tracking (dashboard %/status) | 📋 Planned | Cần F3 (Lark→Tool status sync) trước |
+| TS-F9 | Release readiness auto-check (Go/No-go) | 📋 Planned | Dựa trên TS-F8 |
 
 ### Known Issues
 | # | Mô tả | File | Workaround |
@@ -489,7 +554,7 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 | 2 | Lark field mapping vỡ khi đổi tên cột | useLarkMapping.js | Error message chưa rõ |
 | 3 | SQLite không scale >5 user | schema.sql | Migrate PostgreSQL sau |
 | 4 | Auto-fill SRS→TC chưa handle case nhiều SRS run | useSkillWorkspace.js | Lấy run mới nhất |
-| 5 | AI SRS thỉnh thoảng vẫn hỏi thêm 1 câu ở vòng chốt nếu câu trả lời user hé lộ mâu thuẫn thật sự mới | skill-registry.js (system prompt) | Chấp nhận được — chỉ xảy ra khi có mâu thuẫn nghiệp vụ thật, không phải hỏi vụn vặt như trước |
+| 5 | ~~AI SRS thỉnh thoảng hỏi thêm ở vòng chốt~~ → **Đã đổi thành hành vi CÓ CHỦ ĐÍCH (2026-07-08)**: AI được phép hỏi tiếp qua nhiều vòng nếu câu trả lời vẫn còn thiếu sót business-critical, cho tới khi hết khúc mắc | skill-registry.js (system prompt SRS + buildFinalizePrompt) | Không còn là issue — là thiết kế. `[GIẢ ĐỊNH]` chỉ dùng cho chi tiết cosmetic |
 | 6 | `parseClarificationQuestions` vẫn có thể miss nếu AI dùng định dạng hộp câu hỏi khác hẳn 3 dạng đã test (`> **[...]**`, `**[...]**`, `# [...]`) | srs-clarification.js | Regex đã lenient nhưng không bao quát 100% — nếu gặp case mới cần bổ sung thêm biến thể vào regex |
 | 7 | Nút "+ Thêm feature" thủ công trên TreeNode (sidebar) vẫn gợi ý next-type theo hierarchy cứng module→screen→feature (`NEXT_TYPE` trong TreeNode.jsx) — không tự nhận biết trường hợp user tạo feature trực tiếp dưới module (bỏ qua screen) như nút "Phân rã thành Feature" hỗ trợ | TreeNode.jsx | Không ảnh hưởng — user vẫn tạo thủ công bình thường, chỉ là gợi ý mặc định chưa khớp 100% mọi cách tổ chức cây |
 
@@ -507,3 +572,5 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 | 2026-07-07 | Fix vòng lặp hỏi vô hạn SRS (system prompt: hỏi hết 1 lượt, không hỏi lại sau vòng chốt); thêm buildFinalizePrompt (vòng chốt nhanh hơn); fix parseClarificationQuestions bỏ lỡ câu hỏi khi AI đổi format hộp câu hỏi (nguyên nhân chính khiến cả form hỏi lẫn auto-decompose "không hoạt động"); chặn auto-decompose khi SRS chưa hoàn chỉnh; fix output_json→output field sai ở handleGenAllTC; thêm expectJson ép JSON + nâng maxOutputTokens 8192→32768 cho skill JSON (fix JSON bị cắt cụt) | skill-registry.js, srs-clarification.js (mới), OutputPanel.jsx, main.jsx, ai.routes.js, ai-router.service.js, gemini.provider.js, openai.provider.js | ✅ Đã test thật với Gemini (round hỏi → round chốt → decompose ra 7 feature hợp lệ) |
 | 2026-07-07 | Fix bug "[object Object]" khi user tự chọn skill nội bộ `srsdecomposer` từ sidebar (skill này giờ bị ẩn khỏi danh sách chọn); đổi "Auto Decompose" từ TỰ ĐỘNG sang THỦ CÔNG — thêm nút "Phân rã thành Feature" ở Output, user tự bấm sau khi xem SRS xong; mở rộng hỗ trợ node type "module" (không chỉ "screen") cho cả nút này lẫn "Gen All TC", vì user tổ chức cây Project→Module→Feature trực tiếp (bỏ qua Screen) — đã verify backend không ràng buộc type cha/con nên an toàn | SkillSidebar.jsx, main.jsx | ✅ Build pass; verify độc lập qua workflow (sidebar filter đúng, decomposeSrs không phụ thuộc sidebar, không còn path nào khác lộ srsdecomposer); test thật tạo node feature dưới module qua node.service.js |
 | 2026-07-07 | Fix `projectTree.refreshTree is not a function` — hook `useProjectTree()` định nghĩa `refreshTree()` và dùng nội bộ (createNode/renameNode/deleteNode/importNodes) nhưng quên liệt kê trong object trả về, nên bên ngoài hook (ví dụ `main.jsx#decomposeSrs()`) gọi `projectTree.refreshTree()` luôn bị `undefined`. Bug có sẵn từ trước, chỉ lộ ra hôm nay khi user lần đầu bấm trót lọt tới bước cuối của "Phân rã thành Feature" trên UI thật | useProjectTree.js | ✅ Build pass; đối chiếu đủ 10 usage `projectTree.*` trong main.jsx với object trả về của hook, không còn field nào khác bị thiếu tương tự — CHƯA re-verify qua UI thật sau fix |
+| 2026-07-08 | Sửa hành vi hỏi làm rõ SRS: cho phép hỏi NHIỀU VÒNG khi câu trả lời vẫn còn thiếu business-critical (trước đó bị ép chốt sau đúng 1 vòng); `[GIẢ ĐỊNH]` chỉ dùng cho cosmetic. Sửa system prompt SRS + buildFinalizePrompt + toast | skill-registry.js, main.jsx | ✅ Build pass, verify tầng prompt; chưa test nhiều vòng qua UI |
+| 2026-07-08 | **Feature MỚI: Test Strategy (TS-F6+F7)** — skill `teststrategy` (JSON stages/plan theo 4 template, 2 trục stage), table `test_strategies` + service + routes `/api/strategies`, `StrategyPanel.jsx` inline tại project node (Generate→Review→Approve→Current), ẩn skill khỏi sidebar. Project node giờ CHỈ hiện màn Test Strategy (ẩn SkillSidebar + Requirement/Output). Xem FLOW 7 | schema.sql, strategy.service.js (mới), strategy.routes.js (mới), app.js, strategy-templates.js (mới), skill-registry.js, SkillSidebar.jsx, strategy.api.js (mới), StrategyPanel.jsx (mới), main.jsx | ✅ Build pass; verify schema in-memory + HTTP CRUD end-to-end (port tạm) + gọi AI Gemini thật ra JSON đúng schema. **CHƯA click-test UI browser**. Root cause user báo "gen không chạy" = backend cũ chưa restart (route 404) |
