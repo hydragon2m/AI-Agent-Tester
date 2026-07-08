@@ -973,18 +973,6 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               <h1>{projectTree.activeNode ? projectTree.activePath.map(n => n.name).join(' / ') : 'Chưa chọn node'}</h1>
               <p>{projectTree.activeNode?.context || 'Chọn hoặc tạo project/module/screen/feature để output có đúng ngữ cảnh.'}</p>
             </div>
-            {!isProjectNode && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
-                  <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
-                    {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
-                  </button>
-                )}
-                <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
-                  {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
-                </button>
-              </div>
-            )}
           </div>
 
           {isProjectNode && (
@@ -1096,6 +1084,16 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 </button>
               </div>
             )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
+                <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
+                  {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
+                </button>
+              )}
+              <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
+                {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
+              </button>
+            </div>
           </section>
 
           <section className="panel table-panel">

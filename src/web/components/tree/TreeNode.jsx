@@ -4,21 +4,30 @@ import { getTemplate, templateShort } from '../../features/skills/strategy-templ
 const NODE_TYPES = ['project', 'module', 'screen', 'feature'];
 const NEXT_TYPE = { project: 'module', module: 'screen', screen: 'feature', feature: 'feature' };
 
-// Badge trạng thái Test Plan cho node project — GỌN (mã ngắn), nhãn đầy đủ ở tooltip:
-//   đã cấu hình → "✓NEW/ADD/FIX/VER/FULL" (xanh);  chưa → "Draft" (vàng).
+// Màu riêng cho từng template → phân biệt tag bằng màu (không cần dấu tick).
+const TEMPLATE_COLORS = {
+  new_feature: '#3b82f6',      // blue
+  feature_addition: '#10b981', // green
+  hotfix: '#f59e0b',           // amber
+  new_version: '#a855f7',      // purple
+  full_product: '#06b6d4',     // cyan
+};
+
+// Badge Test Plan cho node project — GỌN (mã ngắn, không dấu tick), phân biệt bằng MÀU
+// theo template; chưa cấu hình → "Draft" xám. Nhãn đầy đủ ở tooltip.
 function PlanBadge({ template, status }) {
   const configured = status === 'configured' || status === 'approved';
   const fullLabel = getTemplate(template)?.label || 'Test plan';
-  const color = configured ? '#2ecc71' : '#c9a227';
+  const color = configured ? (TEMPLATE_COLORS[template] || '#6366f1') : '#94a3b8';
   return (
     <span
-      title={configured ? `Test plan: ${fullLabel} (đã cấu hình)` : 'Chưa cấu hình kế hoạch test'}
+      title={configured ? `Test plan: ${fullLabel}` : 'Chưa cấu hình kế hoạch test'}
       style={{
-        marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '0 5px', borderRadius: 10,
-        border: `1px solid ${color}`, color, whiteSpace: 'nowrap', flexShrink: 0,
+        marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 6,
+        border: `1px solid ${color}`, color, background: `${color}1a`, whiteSpace: 'nowrap', flexShrink: 0,
       }}
     >
-      {configured ? `✓${templateShort(template)}` : 'Draft'}
+      {configured ? templateShort(template) : 'Draft'}
     </span>
   );
 }
@@ -54,7 +63,7 @@ export function TreeNode({ node, nodes, activeNodeId, onSelect, onAdd, onRename,
           title={hasChildren ? (expanded ? 'Thu gọn' : 'Mở rộng') : undefined}
           tabIndex={hasChildren ? 0 : -1}
         >
-          {hasChildren ? (expanded ? '▾' : '▸') : ''}
+          {hasChildren ? (expanded ? '▼' : '▶') : ''}
         </button>
         <button className="tree-node-main" onClick={() => onSelect(node.id)}>
           <span className={`tree-node-icon icon-${node.type}`}>{node.type?.[0]?.toUpperCase() || '-'}</span>

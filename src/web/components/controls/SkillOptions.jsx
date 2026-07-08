@@ -31,27 +31,17 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
   if (activeSkill === 'srs') {
     return (
       <div className="skill-options-row">
-        <label>
+        <label style={{ flex: 1 }}>
           Domain / Ngữ cảnh nghiệp vụ
           <input
             type="text"
             className="pf-input"
+            style={{ flex: 1, width: '100%' }}
             value={options.domain}
             onChange={e => patch({ domain: e.target.value })}
             placeholder="ví dụ: fast-track, transfer, esim... (tùy chọn)"
           />
         </label>
-        <div className="toggle-group">
-          {[{ value: 'full', label: 'Đầy đủ' }, { value: 'concise', label: 'Ngắn gọn' }].map(opt => (
-            <button
-              key={opt.value}
-              className={`toggle-btn ${options.detailLevel === opt.value ? 'active' : ''}`}
-              onClick={() => patch({ detailLevel: opt.value })}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
       </div>
     );
   }

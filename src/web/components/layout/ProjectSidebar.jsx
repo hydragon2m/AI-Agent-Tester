@@ -126,7 +126,7 @@ function SystemGroup({ system, projects, treeProps, onAddProject, onRenameSystem
           title={expanded ? 'Thu gọn' : 'Mở rộng'}
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}
         >
-          {expanded ? '▾' : '▸'}
+          {expanded ? '▼' : '▶'}
         </button>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={system.name}>
           {isReal ? '🗂 ' : ''}{system.name}

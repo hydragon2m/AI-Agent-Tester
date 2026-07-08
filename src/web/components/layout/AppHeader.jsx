@@ -7,8 +7,8 @@ export function AppHeader({ demoMode, setDemoMode, onOpenSettings }) {
         <div className="logo">
           <img src={hydraLogo} alt="Hydra Logo" className="logo-img" style={{ height: '36px', width: 'auto', display: 'block' }} />
           <div className="logo-text">
-            <span className="logo-title" style={{ fontSize: '1.2rem', letterSpacing: '0.05em' }}>HYDRA QA</span>
-            <span className="logo-sub">AI QA Assistant</span>
+            <span className="logo-title" style={{ fontSize: '1.2rem', letterSpacing: '0.05em' }}>AI QA Assistant</span>
+            <span className="logo-sub">Hanhdth</span>
           </div>
         </div>
         <div className="header-actions">
