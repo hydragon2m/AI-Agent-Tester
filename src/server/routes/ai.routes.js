@@ -20,13 +20,13 @@ router.get('/status', async (req, res) => {
 
 // AI Generate
 router.post('/generate', async (req, res) => {
-  const { skill, systemPrompt, userPrompt, nodeId, image } = req.body;
+  const { skill, systemPrompt, userPrompt, nodeId, image, expectJson } = req.body;
   if (!skill || !systemPrompt || !userPrompt) {
     return res.status(400).json({ error: 'Missing required parameters: skill, systemPrompt, userPrompt' });
   }
 
   try {
-    const result = await callAI(systemPrompt, userPrompt, image);
+    const result = await callAI(systemPrompt, userPrompt, image, !!expectJson);
     
     // Log Run to DB
     await dbRun(

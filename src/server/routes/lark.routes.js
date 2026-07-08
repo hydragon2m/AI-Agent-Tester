@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getConfig, saveConfig, testConnection, linkProject, getProjectLink, pushTestCases } = require('../services/lark.service');
+const { getConfig, saveConfig, testConnection, linkProject, getProjectLink, pushTestCases, pushTestCasesScope } = require('../services/lark.service');
 
 // Get current Lark config (secret is never sent back to the client)
 router.get('/config', async (req, res) => {
@@ -98,6 +98,22 @@ router.post('/push', async (req, res) => {
       return res.status(409).json({ error: 'NOT_LINKED', message: e.message });
     }
     res.status(400).json({ error: e.message || 'Đẩy lên Lark thất bại' });
+  }
+});
+
+// Push a whole SCOPE (system/project/module/screen/feature) to a Lark Base
+// given by URL, one table per project. Body: { scopeType, scopeId, url, saveLink }.
+router.post('/push-scope', async (req, res) => {
+  const { scopeType, scopeId, url, saveLink } = req.body;
+  if (!scopeType || !scopeId || !url) {
+    return res.status(400).json({ error: 'scopeType, scopeId và url là bắt buộc' });
+  }
+  try {
+    const result = await pushTestCasesScope(scopeType, scopeId, url, !!saveLink);
+    res.json(result);
+  } catch (e) {
+    console.error('push-scope failed:', e);
+    res.status(400).json({ error: e.message || 'Đẩy scope lên Lark thất bại' });
   }
 });
 

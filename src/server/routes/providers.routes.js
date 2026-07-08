@@ -26,7 +26,7 @@ router.post('/settings', async (req, res) => {
     res.json(settings);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Failed to save provider settings' });
+    res.status(500).json({ error: 'Failed to save provider settings', message: e.message });
   }
 });
 

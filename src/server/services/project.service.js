@@ -1,9 +1,9 @@
 const { dbRun, dbGet, dbAll } = require('../db/db_manager');
 
-async function createProject(id, name, context) {
+async function createProject(id, name, context, systemId) {
   return dbRun(
-    'INSERT INTO projects (id, name, context, created_at) VALUES (?, ?, ?, ?)',
-    [id, name, context || '', new Date().toISOString()]
+    'INSERT INTO projects (id, name, context, system_id, created_at) VALUES (?, ?, ?, ?, ?)',
+    [id, name, context || '', systemId || null, new Date().toISOString()]
   );
 }
 

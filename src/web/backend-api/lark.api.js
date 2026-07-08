@@ -26,6 +26,16 @@ export function linkLarkProjectApi(nodeId, url) {
   });
 }
 
+// Push a whole scope (system/project/module/screen/feature) to a Lark Base
+// given by URL — one table per project. Server does everything with code +
+// Lark API → 0 AI token.
+export function pushScopeToLarkApi({ scopeType, scopeId, url, saveLink }) {
+  return requestJson('/api/lark/push-scope', {
+    method: 'POST',
+    body: JSON.stringify({ scopeType, scopeId, url, saveLink }),
+  });
+}
+
 // Custom fetch (not requestJson) so a 409 NOT_LINKED response can be
 // distinguished from a regular failure via error.code, not just message text.
 export async function pushToLarkApi(nodeId) {

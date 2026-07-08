@@ -86,6 +86,31 @@ function applyChanges(testCase, changes) {
   return updated;
 }
 
+export function sortTestCases(tcs) {
+  if (!Array.isArray(tcs)) return [];
+  return [...tcs].sort((a, b) => {
+    // 1. Sort by module (feature area)
+    const modA = String(a.module || '').toLowerCase();
+    const modB = String(b.module || '').toLowerCase();
+    if (modA !== modB) return modA.localeCompare(modB);
+
+    // 2. Sort by name
+    const nameA = String(a.name || '').toLowerCase();
+    const nameB = String(b.name || '').toLowerCase();
+    if (nameA !== nameB) return nameA.localeCompare(nameB);
+
+    // 3. Sort by type
+    const typeA = String(a.type || '').toLowerCase();
+    const typeB = String(b.type || '').toLowerCase();
+    if (typeA !== typeB) return typeA.localeCompare(typeB);
+
+    // 4. Sort by ID
+    const idA = String(a.id || '').toLowerCase();
+    const idB = String(b.id || '').toLowerCase();
+    return idA.localeCompare(idB);
+  });
+}
+
 export function buildFinalTestCases(originalTCs, reviews, decisions, newSuggestionDecisions, newSuggestions, renumberFn) {
   const reviewsById = new Map((reviews || []).map(r => [r.id, r]));
 
@@ -110,6 +135,9 @@ export function buildFinalTestCases(originalTCs, reviews, decisions, newSuggesti
     .filter((s, idx) => newSuggestionDecisions[idx] && s?.testCase)
     .map(s => s.testCase);
 
-  if (!acceptedSuggestions.length) return kept;
-  return [...kept, ...renumberFn(kept, acceptedSuggestions)];
+  const combined = !acceptedSuggestions.length
+    ? kept
+    : [...kept, ...renumberFn(kept, acceptedSuggestions)];
+
+  return sortTestCases(combined);
 }

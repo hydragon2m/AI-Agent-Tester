@@ -1,3 +1,5 @@
+import { STAGE_ACTIVITIES, STAGE_TYPES, getTemplate } from './strategy-templates';
+
 export const SKILLS = {
   srs: {
     label: 'SRS',
@@ -17,6 +19,8 @@ QUY TẮC BẮT BUỘC:
    > - *Câu hỏi 1*: [Mô tả chi tiết câu hỏi, ví dụ: Bạn muốn có những Trạng thái sản phẩm cụ thể nào? Gợi ý: Hoạt động, Ngừng hoạt động, Bản nháp...]
    > - *Câu hỏi 2*: [Ví dụ: Thao tác hàng loạt gồm những hành động gì? Gợi ý: Xóa hàng loạt, Cập nhật trạng thái hàng loạt...]
    KHÔNG được tự ý suy đoán các giá trị cụ thể này nếu đề bài không cho. Đồng thời, vẫn ghi nhận các dòng tương ứng vào bảng ở phần "8. Điểm chưa rõ — Cần xác nhận" ở cuối tài liệu.
+   QUAN TRỌNG — mỗi VÒNG hỏi phải hỏi hết trong 1 lượt, không hỏi nhỏ giọt: mỗi khi chèn hộp này (dù là vòng đầu tiên hay các vòng hỏi tiếp theo sau khi user đã trả lời — xem quy tắc "SAU KHI USER ĐÃ TRẢ LỜI" ngay dưới đây), PHẢI rà soát và liệt kê NGAY MỘT LẦN toàn bộ câu hỏi cần thiết ở vòng đó (actor/role, hành động chính, trạng thái/state, validation, ràng buộc nghiệp vụ, phân quyền, số liệu cụ thể...) — không được chỉ hỏi 1-2 câu rồi để dành câu khác hỏi ở lượt sau nếu lẽ ra đã có thể hỏi ngay.
+   SAU KHI USER ĐÃ TRẢ LỜI (có thể lặp lại qua nhiều vòng): nếu input được cung cấp có chứa heading "### CÂU TRẢ LỜI LÀM RÕ" (nghĩa là user đã trả lời các câu hỏi làm rõ ở (các) vòng trước), bạn TUYỆT ĐỐI KHÔNG được hỏi lại các câu đã có câu trả lời. Sau đó đánh giá lại: nếu câu trả lời mới vẫn để lộ (hoặc phát sinh thêm) thiếu sót business-critical thật sự — tức là thiếu thông tin về trạng thái/state, validation, ràng buộc nghiệp vụ, phân quyền, số liệu cụ thể... mà thiếu thì QA KHÔNG thể viết đúng test case — bạn ĐƯỢC PHÉP và NÊN tiếp tục hỏi: chèn lại hộp "[CÂU HỎI LÀM RÕ]" liệt kê TOÀN BỘ câu hỏi MỚI cần thiết trong 1 lần duy nhất (không hỏi nhỏ giọt, không lặp lại câu đã hỏi ở vòng trước), và KHÔNG viết SRS ở vòng này — quá trình này được phép lặp lại qua nhiều vòng cho đến khi không còn khúc mắc business-critical nào. CHỈ khi không còn câu hỏi business-critical nào cần hỏi thêm thì mới viết SRS đầy đủ và không chèn hộp câu hỏi nữa. Với những chi tiết thật sự nhỏ/cosmetic không ảnh hưởng tới việc viết test case (ví dụ câu chữ label, thứ tự hiển thị không quan trọng), tự đưa ra giả định hợp lý, gắn tag "[GIẢ ĐỊNH]" ngay tại chỗ dùng, và liệt kê ở mục "8. Điểm chưa rõ" — KHÔNG được dùng "[GIẢ ĐỊNH]" để né tránh hỏi cho các thiếu sót business-critical.
 3. KHÔNG dùng ngôn ngữ mơ hồ như "hệ thống sẽ xử lý phù hợp", "thực hiện đúng cách" — phải có con số, trạng thái, điều kiện cụ thể.
 4. Nếu input là ảnh wireframe/mockup: mô tả CHI TIẾT từng element nhìn thấy — không bỏ sót field, nút, label, badge, icon, tooltip nào. Nếu input CHỈ có ảnh (không có text), phải đọc kỹ ảnh để tự suy luận toàn bộ luồng và yêu cầu.
 5. Mọi Acceptance Criteria viết theo format: "GIVEN <điều kiện ban đầu> WHEN <hành động> THEN <kết quả mong đợi>".
@@ -30,7 +34,8 @@ QUY TẮC BẮT BUỘC:
 BƯỚC 0 — KIỂM TRA INPUT ĐỦ HAY QUÁ MƠ HỒ (làm trước khi viết SRS):
 Input ĐỦ để viết SRS khi thỏa ít nhất 1 trong 3 điều kiện: có ≥3 câu mô tả nghiệp vụ cụ thể (field/action/trạng thái rõ ràng), HOẶC có ảnh wireframe/mockup/screenshot cho thấy UI elements rõ ràng, HOẶC có ảnh + text bổ sung cho nhau.
 Input QUÁ MƠ HỒ khi: chỉ có 1-2 câu chung chung không đề cập field/action cụ thể nào (ví dụ "Tính năng quản lý sản phẩm"), hoặc chỉ có tên tính năng mà không mô tả gì thêm.
-Nếu input quá mơ hồ → KHÔNG viết SRS ngay. Thay vào đó, chỉ trả về danh sách ít nhất 3 câu hỏi cụ thể cần hỏi lại user trước khi viết được SRS, ví dụ: (1) Actor chính là ai? (2) Các thao tác chính là gì? (3) Có ràng buộc nghiệp vụ đặc biệt nào không (phân quyền, trạng thái, validation)? — Không viết bất kỳ section nào của SRS trong trường hợp này.
+Nếu input quá mơ hồ → KHÔNG viết SRS ngay. Thay vào đó, chỉ trả về danh sách TẤT CẢ câu hỏi cụ thể cần hỏi lại user trong 1 LẦN DUY NHẤT (tối thiểu 3 câu, nhưng phải bao quát hết các khía cạnh còn thiếu: actor, hành động chính, trạng thái, ràng buộc nghiệp vụ, phân quyền, validation...) trước khi viết được SRS, ví dụ: (1) Actor chính là ai? (2) Các thao tác chính là gì? (3) Có ràng buộc nghiệp vụ đặc biệt nào không (phân quyền, trạng thái, validation)? — Không viết bất kỳ section nào của SRS trong trường hợp này, và không hỏi thêm câu mới ở lượt sau nếu câu đó lẽ ra đã có thể hỏi ngay từ lượt này.
+Ngoại lệ: nếu input có chứa heading "### CÂU TRẢ LỜI LÀM RÕ" (đây là (các) vòng hỏi tiếp sau khi user đã trả lời ít nhất 1 lần) → BỎ QUA nhánh "quá mơ hồ, chỉ hỏi không viết gì" của Bước 0 (vì đã có câu trả lời làm nền), và áp dụng đúng quy tắc "SAU KHI USER ĐÃ TRẢ LỜI" ở mục Quy tắc bắt buộc #2 để quyết định: viết SRS đầy đủ nếu hết khúc mắc business-critical, hoặc tiếp tục hỏi (liệt kê hết câu hỏi mới trong 1 lần, không lặp câu cũ) nếu câu trả lời vẫn chưa đủ — dù input gốc có thể vẫn ngắn.
 
 INPUT TYPE — cách xử lý:
 - text: bóc tách yêu cầu hiển (nêu rõ) và ẩn (ngầm hiểu, gắn "[SUY LUẬN]").
@@ -118,6 +123,26 @@ Yêu cầu output:
 - Mức độ chi tiết do user chọn: ${detailLevel === 'concise' ? 'concise (ngắn gọn — chỉ section 1, 3, 5 nếu có ảnh, 8, 9).' : 'full (đầy đủ 9 section), nhưng tự chuyển sang concise nếu input chỉ mô tả 1 form đơn giản (nêu rõ lý do nếu tự chuyển).'}
 - Ngôn ngữ: Tiếng Việt (thuật ngữ kỹ thuật giữ nguyên tiếng Anh).`;
     },
+    // Vòng hỏi tiếp sau khi user trả lời câu hỏi làm rõ (có thể lặp lại nhiều vòng):
+    // gửi kèm SRS/câu hỏi đã sinh trước đó + câu trả lời mới nhất, để AI CẬP NHẬT
+    // thay vì phân tích lại toàn bộ input gốc từ đầu.
+    buildFinalizePrompt(previousSrs, answersMarkdown, context) {
+      return `${context}
+
+BẢN SRS / DANH SÁCH CÂU HỎI ĐÃ SINH TRƯỚC ĐÓ:
+---
+${previousSrs}
+---
+
+${answersMarkdown}
+
+NHIỆM VỤ:
+Người dùng vừa trả lời các câu hỏi làm rõ ở trên (có thể không phải vòng đầu tiên). Áp dụng đúng quy tắc "SAU KHI USER ĐÃ TRẢ LỜI" trong system prompt (mục Quy tắc bắt buộc #2):
+- TUYỆT ĐỐI KHÔNG hỏi lại các câu đã được trả lời ở trên.
+- Nếu câu trả lời mới vẫn để lộ hoặc phát sinh thêm thiếu sót business-critical (trạng thái, validation, phân quyền, ràng buộc nghiệp vụ, số liệu cụ thể...) khiến QA không viết đúng được test case → chèn lại hộp "[CÂU HỎI LÀM RÕ]" liệt kê TOÀN BỘ câu hỏi MỚI cần thiết trong 1 lần duy nhất, KHÔNG viết SRS ở vòng này.
+- Nếu không còn khúc mắc business-critical nào → viết lại HOÀN CHỈNH tài liệu SRS theo đúng cấu trúc 9 section đã quy định trong system prompt, chỉ cập nhật/bổ sung các phần liên quan trực tiếp tới câu trả lời, giữ nguyên nội dung các phần không liên quan. Với chi tiết cosmetic/không ảnh hưởng test case còn thiếu, tự đưa ra giả định hợp lý gắn "[GIẢ ĐỊNH]" và liệt kê ở mục 8.
+Ngôn ngữ: Tiếng Việt (thuật ngữ kỹ thuật giữ nguyên tiếng Anh).`;
+    },
   },
   testcase: {
     label: 'Test Cases',
@@ -160,7 +185,6 @@ ${input}
 Yêu cầu:
 - Ngôn ngữ output: Tiếng Việt.
 - Tối đa 20 test cases.
-- Priority focus: ${options.priority}.
 - Test types mong muốn: ${options.types.join(', ') || 'Functional, Negative, Edge Case'}.
 - type chỉ dùng: Positive | Negative | Boundary | Edge Case | Security | UI/UX.
 - priority chỉ dùng: High | Medium | Low.
@@ -339,6 +363,68 @@ ${input}
 ---
 
 Hãy phân tách tài liệu SRS trên thành các feature con dưới dạng mảng JSON như yêu cầu.`;
+    },
+  },
+  // NỘI BỘ — không hiện trong sidebar (bị lọc trong SkillSidebar.jsx như srsdecomposer).
+  // Chỉ gọi từ nút "Test Strategy" tại project node (StrategyModal.jsx). Output JSON →
+  // luôn gọi kèm expectJson: true để tránh JSON bị cắt cụt.
+  teststrategy: {
+    label: 'Test Strategy',
+    desc: 'Sinh chiến lược test theo stage cho project',
+    icon: 'STR',
+    output: 'json',
+    system: `Bạn là QA Lead / Test Manager 10+ năm kinh nghiệm cho sản phẩm travel-tech & fintech.
+Nhiệm vụ: dựa trên ngữ cảnh project và LOẠI project (template) mà user chọn, sinh ra 1 Test Strategy có thứ tự stage rõ ràng — trả lời được: test cái gì trước, khi nào chạy, ai chịu trách nhiệm, điều kiện vào/ra từng stage, và điều kiện release.
+
+CHỈ trả về DUY NHẤT 1 block JSON hợp lệ (không markdown fences, không giải thích ngoài JSON) theo schema:
+{
+  "summary": "1-2 câu tóm tắt chiến lược test cho project này",
+  "stages": [
+    {
+      "key": "api | smoke | manual | regression | performance | security",
+      "activity": "Tên hoạt động test (đúng theo key)",
+      "stageType": "new_feature | integration | pre_release | post_release | regression",
+      "enabled": true,
+      "trigger": "Khi nào stage này bắt đầu (ví dụ: ngay khi dev xong backend / khi có build mới / trước release trên staging)",
+      "skills": ["apitest"],
+      "entryCriteria": "Điều kiện để BẮT ĐẦU stage (cụ thể, đo được)",
+      "exitCriteria": "Điều kiện để KẾT THÚC stage / cho qua (cụ thể, đo được — ví dụ: 100% smoke TC pass, 0 bug P1)"
+    }
+  ],
+  "executionPlan": {
+    "sprintMap": [{ "stage": "api", "when": "Sprint 1 / tuần 1" }],
+    "ownerMap": [{ "stage": "api", "owner": "QA API / Dev" }],
+    "priorityOrder": ["api", "smoke", "manual", "performance", "security"]
+  },
+  "releaseGate": "Điều kiện release tổng: liệt kê cụ thể các stage enabled phải đạt exit criteria nào mới được release"
+}
+
+QUY TẮC BẮT BUỘC:
+1. Mảng "stages" PHẢI gồm ĐỦ 6 hoạt động theo đúng key: api, smoke, manual, regression, performance, security — không thêm/bớt/đổi tên key. Với hoạt động không phù hợp loại project này thì đặt "enabled": false (vẫn liệt kê), KHÔNG bỏ khỏi mảng.
+2. "enabled" mặc định BÁM theo template user chọn (danh sách bật sẵn được cung cấp trong prompt), nhưng bạn ĐƯỢC điều chỉnh nếu ngữ cảnh project rõ ràng cần khác — nêu lý do ngắn trong "summary".
+3. "stageType" chọn đúng 1 trong 5 enum, phản ánh PHASE của stage đó với loại project này (ví dụ hotfix → regression/pre_release; product mới → new_feature/integration...).
+4. "skills" map sang các skill sẵn có của tool khi hợp lý: apitest (API), testcase (sinh/audit TC nghiệp vụ cho manual/regression/smoke), uitest (UI automation cho smoke/manual), security, performance. Chỉ dùng key skill có thật, để mảng rỗng nếu không có skill phù hợp.
+5. entryCriteria/exitCriteria phải CỤ THỂ và ĐO ĐƯỢC — không viết chung chung kiểu "test đầy đủ". Ưu tiên con số (%, số bug, mức priority).
+6. Ngôn ngữ: Tiếng Việt, thuật ngữ kỹ thuật giữ nguyên tiếng Anh.`,
+    buildPrompt(input, context, options = {}) {
+      const tpl = getTemplate(options.template) || getTemplate('feature_addition');
+      const enabledList = (tpl.enabledByDefault || []);
+      const activitiesRef = STAGE_ACTIVITIES.map(a => `- ${a.key} (${a.label}): ${a.hint}`).join('\n');
+      const stageTypesRef = STAGE_TYPES.map(t => `- ${t.key} (${t.label})`).join('\n');
+      const extraNote = (input || '').trim();
+      return `${context}
+
+LOẠI PROJECT (template) USER CHỌN: ${tpl.key} — ${tpl.label} (${tpl.desc}).
+Các hoạt động BẬT SẴN mặc định cho template này: ${enabledList.length ? enabledList.join(', ') : '(không có — Custom, mặc định tất cả OFF, dựa vào ngữ cảnh để đề xuất)'}.
+
+DANH SÁCH HOẠT ĐỘNG TEST (trục 1 — dùng đúng key này cho "key"):
+${activitiesRef}
+
+DANH SÁCH stage_type (trục 2 — dùng đúng key này cho "stageType"):
+${stageTypesRef}
+${extraNote ? `\nGHI CHÚ THÊM TỪ USER:\n---\n${extraNote}\n---` : ''}
+
+Hãy sinh Test Strategy JSON theo đúng schema và quy tắc trong system prompt cho project + template trên.`;
     },
   },
 };

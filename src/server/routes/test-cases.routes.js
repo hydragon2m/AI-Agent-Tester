@@ -1,6 +1,55 @@
 const express = require('express');
 const router = express.Router();
-const { getTestCases, saveTestCases } = require('../services/test-case.service');
+const { getTestCases, saveTestCases, getTestCasesForScope } = require('../services/test-case.service');
+
+function mapTcRow(tc) {
+  return {
+    id: tc.id,
+    nodeId: tc.node_id,
+    externalId: tc.external_id,
+    module: tc.module,
+    name: tc.name,
+    type: tc.type,
+    priority: tc.priority,
+    suite: tc.suite,
+    automationCandidate: tc.automation_candidate,
+    traceTo: tc.trace_to,
+    preconditions: tc.preconditions,
+    steps: JSON.parse(tc.steps_json || '[]'),
+    testData: tc.test_data,
+    expectedResult: tc.expected_result,
+    status: tc.status,
+    actualResult: tc.actual_result,
+    relatedBug: tc.related_bug,
+    version: tc.version,
+    nodePath: tc._path || { module: '', screen: '', feature: '' }
+  };
+}
+
+// Export a whole SCOPE (system/project/module/screen/feature) as test cases
+// grouped by project. MUST stay ABOVE '/:nodeId' — otherwise Express matches
+// this path as GET /:nodeId with nodeId="export-scope". Pure DB → 0 AI token.
+router.get('/export-scope', async (req, res) => {
+  const { scopeType, scopeId } = req.query;
+  if (!scopeType || !scopeId) {
+    return res.status(400).json({ error: 'scopeType và scopeId là bắt buộc' });
+  }
+  try {
+    const { scopeName, groups } = await getTestCasesForScope(scopeType, scopeId);
+    res.json({
+      scopeType,
+      scopeName,
+      groups: groups.map(g => ({
+        projectId: g.projectId,
+        projectName: g.projectName,
+        testCases: g.rows.map(mapTcRow)
+      }))
+    });
+  } catch (e) {
+    console.error('export-scope failed:', e);
+    res.status(500).json({ error: e.message || 'Export scope thất bại' });
+  }
+});
 
 // Get Test Cases
 router.get('/:nodeId', async (req, res) => {

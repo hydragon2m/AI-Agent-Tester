@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "hydra-qa",
+  "productName": "QA_Assistant",
   "version": "0.1.0",
   "identifier": "com.hydraqa.assistant",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "HYDRA QA",
+        "title": "QA_Assistant",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,

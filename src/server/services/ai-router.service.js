@@ -8,9 +8,12 @@ const PROVIDER_META = {
   openai: { label: 'GPT-4o' },
 };
 
-const { getActiveKey } = require('./provider.service');
+const { getActiveKey, getProviderSettings } = require('./provider.service');
 
-async function callAI(systemPrompt, userContent, image) {
+// Fallback mặc định khi provider chưa có priority trong DB — KHÔNG đảo (CLAUDE.md)
+const DEFAULT_ORDER = ['claude', 'gemini', 'openai'];
+
+async function callAI(systemPrompt, userContent, image, expectJson = false) {
   // Query DB keys first, fall back to environment variables
   const dbGeminiKey = await getActiveKey('gemini');
   const dbClaudeKey = await getActiveKey('claude');
@@ -31,7 +34,17 @@ async function callAI(systemPrompt, userContent, image) {
     }
   };
 
-  const ORDER = ['gemini', 'claude', 'openai'];
+  // Sắp theo priority đã lưu trong DB (số nhỏ hơn = ưu tiên trước); provider chưa có setting dùng DEFAULT_ORDER
+  const settings = await getProviderSettings();
+  const priorityByProvider = {};
+  for (const s of settings) priorityByProvider[s.provider] = s.priority;
+
+  const ORDER = [...DEFAULT_ORDER].sort((a, b) => {
+    const pa = priorityByProvider[a] ?? (DEFAULT_ORDER.indexOf(a) + 1);
+    const pb = priorityByProvider[b] ?? (DEFAULT_ORDER.indexOf(b) + 1);
+    return pa - pb;
+  });
+
   const available = ORDER.filter(p => providers[p]?.enabled && providers[p]?.key);
 
   if (available.length === 0) {
@@ -45,9 +58,9 @@ async function callAI(systemPrompt, userContent, image) {
       let result;
       const key = providers[provider].key;
 
-      if (provider === 'gemini') result = await callGemini(systemPrompt, userContent, key, 0, image);
+      if (provider === 'gemini') result = await callGemini(systemPrompt, userContent, key, 0, image, expectJson);
       else if (provider === 'claude') result = await callClaude(systemPrompt, userContent, key, image);
-      else if (provider === 'openai') result = await callOpenAI(systemPrompt, userContent, key, 0, image);
+      else if (provider === 'openai') result = await callOpenAI(systemPrompt, userContent, key, 0, image, expectJson);
 
       return {
         provider,

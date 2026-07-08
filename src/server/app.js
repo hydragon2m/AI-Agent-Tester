@@ -13,6 +13,8 @@ const aiRouter = require('./routes/ai.routes');
 const providersRouter = require('./routes/providers.routes');
 const skillRunsRouter = require('./routes/skill-runs.routes');
 const larkRouter = require('./routes/lark.routes');
+const strategyRouter = require('./routes/strategy.routes');
+const systemsRouter = require('./routes/systems.routes');
 
 const app = express();
 const port = 3001;
@@ -28,6 +30,8 @@ app.use('/api/ai', aiRouter);
 app.use('/api/providers', providersRouter);
 app.use('/api/skill-runs', skillRunsRouter);
 app.use('/api/lark', larkRouter);
+app.use('/api/strategies', strategyRouter);
+app.use('/api/systems', systemsRouter);
 
 // Serve built frontend in production. Fall back to the Vite source folder for local checks.
 const rootPath = path.dirname(path.dirname(__dirname));

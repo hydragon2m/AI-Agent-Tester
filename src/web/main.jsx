@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { generateAiOutput } from './backend-api/ai.api';
-import { fetchTestCases, saveTestCasesApi } from './backend-api/test-cases.api';
+import { fetchTestCases, saveTestCasesApi, exportScopeApi } from './backend-api/test-cases.api';
 import { fetchLarkLinkApi, linkLarkProjectApi, pushToLarkApi } from './backend-api/lark.api';
 import { createNodeApi } from './backend-api/nodes.api';
 import { createSkillRun, fetchSkillRuns } from './backend-api/skill-runs.api';
@@ -12,11 +12,18 @@ import { SkillSidebar } from './components/layout/SkillSidebar';
 import { LarkLinkModal } from './components/output/LarkLinkModal';
 import { ManualPromptModal } from './components/output/ManualPromptModal';
 import { OutputPanel } from './components/output/OutputPanel';
+import { ExportFileModal } from './components/output/ExportFileModal';
+import { ExportLarkModal } from './components/output/ExportLarkModal';
 import { ProviderSettingsModal } from './components/providers/ProviderSettingsModal';
+import { StrategyPanel } from './components/strategy/StrategyPanel';
+import { CreateProjectModal } from './components/strategy/CreateProjectModal';
 import { DEMO_OUTPUTS, EXAMPLES, SKILLS } from './features/skills/skill-registry';
+import { parseClarificationQuestions } from './features/skills/srs-clarification';
+import { getVisibleSkillIds } from './utils/skill-gating';
+import { fetchStrategyApi } from './backend-api/strategy.api';
 import { toCsv, toLarkClipboardPayload, toMarkdown } from './features/testcase/testcase-export';
 import { parseAiJson, stripCodeFence } from './features/testcase/testcase-parser';
-import { QUALITY_SYSTEM_PROMPT, buildQualityPrompt, buildFinalTestCases } from './features/testcase/testcase-quality';
+import { QUALITY_SYSTEM_PROMPT, buildQualityPrompt, buildFinalTestCases, sortTestCases } from './features/testcase/testcase-quality';
 import { useLarkConfig } from './state/useLarkConfig';
 import { useLarkMapping } from './state/useLarkMapping';
 import { buildContext, useProjectTree } from './state/useProjectTree';
@@ -24,6 +31,11 @@ import { useProviderSettings } from './state/useProviderSettings';
 import { useSkillHistory } from './state/useSkillHistory';
 import { useSkillWorkspace } from './state/useSkillWorkspace';
 import './index.css';
+
+// Node types mà SRS trên đó có thể "Phân rã thành Feature" (tạo node con type=feature) —
+// 'screen' theo đúng hierarchy module→screen→feature, và 'module' cho project không dùng
+// cấp screen trung gian (SRS viết thẳng ở module, feature là con trực tiếp của module).
+const FEATURE_PARENT_TYPES = ['module', 'screen'];
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -111,6 +123,12 @@ function App() {
   const [larkLinkOpen, setLarkLinkOpen] = useState(false);
   const [larkLinkUrl, setLarkLinkUrl] = useState('');
   const [larkLinking, setLarkLinking] = useState(false);
+  const [decomposeResult, setDecomposeResult] = useState(null);
+  const [decomposing, setDecomposing] = useState(false);
+  const [createProject, setCreateProject] = useState(null); // { systemId, systemName } | null → mở CreateProjectModal
+  const [activePlan, setActivePlan] = useState(undefined);   // undefined = chưa fetch, null = không có plan, obj = plan
+  const [exportFileData, setExportFileData] = useState(null);    // {scopeType, scopeName, groups} | null → mở ExportFileModal
+  const [exportLarkTarget, setExportLarkTarget] = useState(null); // {scopeType, scopeId, name} | null → mở ExportLarkModal
 
   const projectTree = useProjectTree(setToast);
   const providers = useProviderSettings(setToast);
@@ -124,6 +142,53 @@ function App() {
   const skill = SKILLS[workspace.activeSkill];
   const testCases = workspace.output?.testCases || [];
   const skipNextHistorySync = useRef(false);
+
+  // Project node = màn Test Strategy (ẩn hoàn toàn phần skill Requirement/Output).
+  const isProjectNode = projectTree.activeNode?.type === 'project';
+
+  // Skill-gating: danh sách skill được hiện dựa trên node type + test plan của project.
+  // Plan chưa cấu hình → getVisibleSkillIds trả đủ skill (backward-compat).
+  const visibleSkillIds = getVisibleSkillIds(projectTree.activeNode?.type, activePlan);
+  const planConfigured = !!(activePlan && (activePlan.status === 'configured' || activePlan.status === 'approved'));
+
+  // Module/Screen/Feature của node đang chọn (context) — dùng cho bảng TC + export CSV.
+  const nodePathInfo = { module: '', screen: '', feature: '' };
+  for (const n of projectTree.activePath) {
+    if (n.type === 'module') nodePathInfo.module = n.name;
+    else if (n.type === 'screen') nodePathInfo.screen = n.name;
+    else if (n.type === 'feature') nodePathInfo.feature = n.name;
+  }
+
+  // Tải test plan của project chứa node đang chọn (cho gating + banner cảnh báo).
+  useEffect(() => {
+    const node = projectTree.activeNode;
+    if (!node || node.type === 'project' || !node.projectId) { setActivePlan(node && node.type !== 'project' ? null : undefined); return; }
+    let alive = true;
+    setActivePlan(undefined);
+    fetchStrategyApi(node.projectId)
+      .then(p => { if (alive) setActivePlan(p || null); })
+      .catch(() => { if (alive) setActivePlan(null); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectTree.activeNodeId, projectTree.activeNode?.projectId, projectTree.activeNode?.type]);
+
+  // Nếu skill đang chọn bị gating ẩn đi → tự chuyển sang skill hiển thị đầu tiên.
+  useEffect(() => {
+    if (isProjectNode || !visibleSkillIds.length) return;
+    if (!visibleSkillIds.includes(workspace.activeSkill)) workspace.setActiveSkill(visibleSkillIds[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleSkillIds.join(','), isProjectNode, workspace.activeSkill]);
+
+  async function handleProjectCreated(project) {
+    setCreateProject(null);
+    await projectTree.refreshTree();
+    projectTree.setActiveNodeId(project.id);
+  }
+
+  const srsMarkdownForActions = workspace.activeSkill === 'srs' ? String(workspace.output || workspace.rawOutput || '') : '';
+  const canDecomposeFeatures = Boolean(srsMarkdownForActions.trim())
+    && FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type)
+    && parseClarificationQuestions(srsMarkdownForActions).length === 0;
 
   useEffect(() => {
     // Chuyển skill sang tab khác (ví dụ nút "Viết Test Case →") load lại history
@@ -231,6 +296,7 @@ function App() {
             systemPrompt: QUALITY_SYSTEM_PROMPT,
             userPrompt: buildQualityPrompt(cases, requirement),
             nodeId: projectTree.activeNodeId,
+            expectJson: true,
           });
       const review = parseAiJson(generated.output);
       setQualityReview(review);
@@ -312,20 +378,21 @@ function App() {
             userPrompt: skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), { ...workspace.options, hasImage }),
             nodeId: projectTree.activeNodeId,
             image: hasImage ? { mediaType: workspace.image.mediaType, data: workspace.image.data } : undefined,
+            expectJson: skill.output === 'testcase',
           });
 
       const parsed = skill.output === 'testcase' ? parseAiJson(generated.output) : stripCodeFence(generated.output);
-      workspace.setSkillOutput(parsed, generated.output);
       if (workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases)) {
-        await saveTestCasesApi(projectTree.activeNodeId, parsed.testCases);
+        const sorted = sortTestCases(parsed.testCases);
+        parsed.testCases = sorted;
+        await saveTestCasesApi(projectTree.activeNodeId, sorted);
       }
+      workspace.setSkillOutput(parsed, generated.output);
       await saveSkillRun(workspace.input, parsed, generated.output, generated.provider);
       setToast(`Đã sinh output bằng ${generated.provider}`);
-      if (workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases) && parsed.testCases.length) {
+      // Chỉ auto-audit khi user bật checkbox (tiết kiệm token); mặc định tắt — user tự bấm "Đánh giá chất lượng" ở Output.
+      if (workspace.options.autoAudit && workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases) && parsed.testCases.length) {
         await runQualityCheck(parsed.testCases, workspace.input);
-      }
-      if (workspace.activeSkill === 'srs' && projectTree.activeNode?.type === 'screen') {
-        await decomposeSrs(parsed, generated.provider);
       }
     } catch (e) {
       setToast(`Lỗi: ${e.message}`);
@@ -369,6 +436,7 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
             systemPrompt: skill.system,
             userPrompt: `${buildContext(projectTree.activePath)}\n\n${appendPrompt}`,
             nodeId: projectTree.activeNodeId,
+            expectJson: true,
           });
       const parsedNew = parseAiJson(generated.output);
       const newCases = renumberNewCases(existingCases, parsedNew.testCases || []);
@@ -402,15 +470,18 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
 
   async function handleClarificationSubmit(answers) {
     if (workspace.activeSkill !== 'srs') return;
-    
-    const answerMarkdown = "\n\n### CÂU TRẢ LỜI LÀM RÕ:\n" + 
+
+    const answerMarkdown = "### CÂU TRẢ LỜI LÀM RÕ:\n" +
       Object.entries(answers)
         .map(([qLabel, qAnswer]) => `- **${qLabel}**: ${qAnswer}`)
         .join('\n');
-        
-    const nextRequirement = workspace.input.trim() + answerMarkdown;
+
+    // Giữ nguyên bản SRS/câu hỏi trước đó — dùng làm cơ sở cho vòng chốt thay vì
+    // phân tích lại input gốc từ đầu (nhanh hơn, và AI không hỏi lại câu đã trả lời).
+    const previousSrsText = String(workspace.output || workspace.rawOutput || '');
+    const nextRequirement = workspace.input.trim() + "\n\n" + answerMarkdown;
     workspace.setSkillInput(nextRequirement);
-    
+
     setTimeout(async () => {
       dismissReview();
       setLoading(true);
@@ -420,17 +491,17 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
           : await generateAiOutput({
               skill: 'srs',
               systemPrompt: skill.system,
-              userPrompt: skill.buildPrompt(nextRequirement, buildContext(projectTree.activePath), { ...workspace.options, hasImage: false }),
+              userPrompt: skill.buildFinalizePrompt(previousSrsText, answerMarkdown, buildContext(projectTree.activePath)),
               nodeId: projectTree.activeNodeId,
             });
 
         const parsed = stripCodeFence(generated.output);
         workspace.setSkillOutput(parsed, generated.output);
         await saveSkillRun(nextRequirement, parsed, generated.output, generated.provider);
-        setToast(`Đã cập nhật SRS bằng ${generated.provider}`);
-        if (projectTree.activeNode?.type === 'screen') {
-          await decomposeSrs(parsed, generated.provider);
-        }
+        const stillHasQuestions = parseClarificationQuestions(parsed).length > 0;
+        setToast(stillHasQuestions
+          ? `AI cần thêm thông tin — vui lòng trả lời tiếp các câu hỏi mới (${generated.provider})`
+          : `Đã cập nhật SRS hoàn chỉnh bằng ${generated.provider}`);
       } catch (e) {
         setToast(`Lỗi: ${e.message}`);
       } finally {
@@ -439,13 +510,28 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     }, 50);
   }
 
+  // Được gọi thủ công từ nút "Phân rã thành Feature" trên Output (sau khi user
+  // xác nhận SRS đã ổn) — KHÔNG tự chạy ngay sau khi Gen SRS xong nữa, vì user
+  // muốn tự quyết định lúc nào mới bóc tách thay vì AI tự ý làm luôn.
+  async function handleDecomposeFeatures() {
+    const srsContent = String(workspace.output || workspace.rawOutput || '');
+    if (!srsContent.trim() || !projectTree.activeNodeId) return;
+    setDecomposing(true);
+    try {
+      await decomposeSrs(srsContent);
+    } finally {
+      setDecomposing(false);
+    }
+  }
+
   async function decomposeSrs(srsContent, provider) {
     if (!projectTree.activeNodeId) return;
-    setToast('Đang phân tách SRS thành các Feature...');
+    setToast('Đang phân rã SRS thành các Feature...');
+    setDecomposeResult(null);
     try {
       const systemPrompt = SKILLS.srsdecomposer.system;
       const userPrompt = SKILLS.srsdecomposer.buildPrompt(srsContent, buildContext(projectTree.activePath));
-      
+
       const generated = demoMode
         ? { output: JSON.stringify([{ name: 'Quản lý sản phẩm con', srsSegment: '## Đặc tả con' }]), provider: 'demo' }
         : await generateAiOutput({
@@ -453,55 +539,95 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
             systemPrompt,
             userPrompt,
             nodeId: projectTree.activeNodeId,
+            expectJson: true,
           });
-      
+
       const features = parseAiJson(generated.output);
       if (!Array.isArray(features)) {
         console.error('Features decomp did not return array:', features);
+        setDecomposeResult({ status: 'error', message: 'AI không trả về danh sách feature hợp lệ.' });
         return;
       }
-      
+
       let createdCount = 0;
+      const createdNames = [];
       for (const feature of features) {
         if (!feature.name || !feature.srsSegment) continue;
-        
-        const exists = projectTree.nodes.some(n => 
-          n.parentId === projectTree.activeNodeId && 
+
+        const exists = projectTree.nodes.some(n =>
+          n.parentId === projectTree.activeNodeId &&
           n.name.trim().toLowerCase() === feature.name.trim().toLowerCase()
         );
         if (exists) continue;
-        
+
         const created = await createNodeApi({
           parentId: projectTree.activeNodeId,
           type: 'feature',
           name: feature.name.trim(),
-          context: `Đặc tả bóc tách từ Screen: ${projectTree.activeNode.name}`,
+          context: `Đặc tả bóc tách từ: ${projectTree.activeNode.name}`,
         });
-        
+
         await createSkillRun({
           nodeId: created.id,
           skill: 'srs',
           title: `SRS Phân rã: ${feature.name.trim()}`,
-          input: 'Được bóc tách tự động từ Screen SRS',
+          input: 'Được bóc tách từ SRS của node cha',
           output: feature.srsSegment,
           rawOutput: feature.srsSegment,
           provider: generated.provider
         });
         createdCount++;
+        createdNames.push(feature.name.trim());
       }
-      
+
       await projectTree.refreshTree();
-      setToast(`Đã tự động tạo và bóc tách ${createdCount} Feature thành công!`);
+      setToast(`Đã tạo và bóc tách ${createdCount} Feature thành công!`);
+      setDecomposeResult({ status: 'done', count: createdCount, total: features.length, names: createdNames });
     } catch (e) {
       console.error('Failed to decompose SRS:', e);
       setToast(`Lỗi phân tách Feature: ${e.message}`);
+      setDecomposeResult({ status: 'error', message: e.message });
     }
+  }
+
+  // Sinh draft Test Strategy bằng AI (F6) — gọi từ StrategyModal. Trả về object
+  // đã parse { summary, stages, executionPlan, releaseGate } để modal review + toggle.
+  const DEMO_STRATEGY = {
+    summary: '(Demo) Chiến lược test cho việc thêm tính năng vào product đã có.',
+    stages: [
+      { key: 'api', activity: 'API Testing', stageType: 'integration', enabled: true, trigger: 'Ngay khi dev xong backend', skills: ['apitest'], entryCriteria: 'Endpoint deploy lên môi trường test', exitCriteria: '100% API TC pass, 0 bug P1' },
+      { key: 'smoke', activity: 'Smoke Test', stageType: 'integration', enabled: true, trigger: 'Khi có build mới', skills: ['testcase'], entryCriteria: 'Build deploy thành công', exitCriteria: 'Toàn bộ smoke TC pass' },
+      { key: 'manual', activity: 'Manual / Functional', stageType: 'new_feature', enabled: true, trigger: 'Sau khi smoke pass', skills: ['testcase', 'uitest'], entryCriteria: 'Smoke đã pass', exitCriteria: 'Full TC pass, bug P1/P2 đã fix' },
+      { key: 'regression', activity: 'Regression', stageType: 'regression', enabled: true, trigger: 'Trước khi release', skills: ['testcase'], entryCriteria: 'Manual đã xong', exitCriteria: 'Bộ regression pass 100%' },
+      { key: 'performance', activity: 'Performance', stageType: 'pre_release', enabled: false, trigger: 'Trên staging trước release', skills: ['performance'], entryCriteria: '', exitCriteria: '' },
+      { key: 'security', activity: 'Security', stageType: 'pre_release', enabled: false, trigger: 'Trên staging trước release', skills: ['security'], entryCriteria: '', exitCriteria: '' },
+    ],
+    executionPlan: {
+      sprintMap: [{ stage: 'api', when: 'Sprint 1' }, { stage: 'manual', when: 'Sprint 2' }],
+      ownerMap: [{ stage: 'api', owner: 'QA API / Dev' }, { stage: 'manual', owner: 'QA Manual' }],
+      priorityOrder: ['api', 'smoke', 'manual', 'regression'],
+    },
+    releaseGate: '(Demo) Release khi API + Smoke + Manual + Regression đều đạt exit criteria, 0 bug P1 open.',
+  };
+
+  async function handleGenerateStrategyDraft(template, note) {
+    const generated = demoMode
+      ? { output: JSON.stringify(DEMO_STRATEGY), provider: 'demo' }
+      : await generateAiOutput({
+          skill: 'teststrategy',
+          systemPrompt: SKILLS.teststrategy.system,
+          userPrompt: SKILLS.teststrategy.buildPrompt(note, buildContext(projectTree.activePath), { template }),
+          nodeId: projectTree.activeNodeId,
+          expectJson: true,
+        });
+    const parsed = parseAiJson(generated.output);
+    return { ...parsed, provider: generated.provider };
   }
 
   async function handleGenAllTC() {
     const childFeatures = projectTree.nodes.filter(n => n.parentId === projectTree.activeNodeId && n.type === 'feature');
     if (!childFeatures.length) {
-      setToast('Không có Feature con nào dưới Screen này để sinh Test Case');
+      setToast('Không có Feature con nào dưới node này để sinh Test Case');
       return;
     }
     
@@ -523,15 +649,16 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
         return false;
       }
 
-      const srsContent = latestSrs.output_json || latestSrs.rawOutput;
+      const srsContent = latestSrs.output || latestSrs.rawOutput;
 
       const generated = demoMode
         ? { output: DEMO_OUTPUTS.testcase, provider: 'demo' }
         : await generateAiOutput({
             skill: 'testcase',
             systemPrompt: SKILLS.testcase.system,
-            userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { priority: 'High', types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
+            userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
             nodeId: feature.id,
+            expectJson: true,
           });
 
       const parsed = parseAiJson(generated.output);
@@ -595,7 +722,13 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     if (!projectTree.activeNodeId) return;
     setLoading(true);
     try {
-      await saveTestCasesApi(projectTree.activeNodeId, testCases);
+      const sorted = sortTestCases(testCases);
+      await saveTestCasesApi(projectTree.activeNodeId, sorted);
+      workspace.setSkillOutput({
+        ...workspace.output,
+        testCases: sorted,
+        total: sorted.length
+      }, workspace.rawOutput, 'testcase');
       setToast('Đã lưu các thay đổi của test case vào cơ sở dữ liệu!');
     } catch (e) {
       setToast(`Lỗi lưu test case: ${e.message}`);
@@ -704,7 +837,7 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
   function exportOutput(format = 'txt') {
     if (!workspace.output && !workspace.rawOutput) return;
     if (workspace.activeSkill === 'testcase') {
-      if (format === 'csv') return downloadFile(toCsv(testCases, lark.larkMapping), `test-cases-${Date.now()}.csv`, 'text/csv');
+      if (format === 'csv') return downloadFile(toCsv(testCases, nodePathInfo, lark.larkMapping), `test-cases-${Date.now()}.csv`, 'text/csv');
       if (format === 'md') return downloadFile(toMarkdown(workspace.output), `test-cases-${Date.now()}.md`, 'text/markdown');
       return downloadFile(JSON.stringify(workspace.output || {}, null, 2), `test-cases-${Date.now()}.json`, 'application/json');
     }
@@ -806,6 +939,22 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
     }
   }
 
+  // Export test case theo scope (system/project/module/screen/feature) — 0 token AI.
+  // node = { id, name, type } (type === scopeType; 'system' cho nhóm System trên sidebar).
+  async function handleExportScopeFile(node) {
+    if (!node?.id || !node?.type) return;
+    try {
+      const data = await exportScopeApi(node.type, node.id);
+      setExportFileData(data);
+    } catch (e) {
+      setToast(`Không tải được test case để export: ${e.message}`);
+    }
+  }
+  function handleExportScopeLark(node) {
+    if (!node?.id || !node?.type) return;
+    setExportLarkTarget({ scopeType: node.type, scopeId: node.id, name: node.name });
+  }
+
   return (
     <>
       <div className="bg-grid" />
@@ -826,20 +975,26 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           onDelete={handleDeleteNode}
           onExport={exportTree}
           onImport={importTree}
+          onCreateProject={(systemId, systemName) => setCreateProject({ systemId, systemName })}
+          onExportFile={handleExportScopeFile}
+          onExportLark={handleExportScopeLark}
         />
 
-        <SkillSidebar
-          activeSkill={workspace.activeSkill}
-          setActiveSkill={workspace.setActiveSkill}
-          history={skillHistory.runs}
-          historyLoading={skillHistory.loading}
-          activeHistoryId={activeHistoryId}
-          hasActiveNode={!!projectTree.activeNodeId}
-          onViewHistory={viewHistoryItem}
-          onRenameHistory={renameHistoryItem}
-          onDeleteHistory={deleteHistoryItem}
-          onRestoreHistory={restoreHistoryItem}
-        />
+        {!isProjectNode && (
+          <SkillSidebar
+            activeSkill={workspace.activeSkill}
+            setActiveSkill={workspace.setActiveSkill}
+            history={skillHistory.runs}
+            historyLoading={skillHistory.loading}
+            activeHistoryId={activeHistoryId}
+            hasActiveNode={!!projectTree.activeNodeId}
+            visibleSkillIds={visibleSkillIds}
+            onViewHistory={viewHistoryItem}
+            onRenameHistory={renameHistoryItem}
+            onDeleteHistory={deleteHistoryItem}
+            onRestoreHistory={restoreHistoryItem}
+          />
+        )}
 
         <section className="web-workspace">
           <div className="workspace-header">
@@ -848,17 +1003,61 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               <h1>{projectTree.activeNode ? projectTree.activePath.map(n => n.name).join(' / ') : 'Chưa chọn node'}</h1>
               <p>{projectTree.activeNode?.context || 'Chọn hoặc tạo project/module/screen/feature để output có đúng ngữ cảnh.'}</p>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {projectTree.activeNode?.type === 'screen' && (
-                <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
-                  {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
-                </button>
-              )}
-              <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
-                {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
+          </div>
+
+          {isProjectNode && (
+            <StrategyPanel
+              projectNode={projectTree.activeNode}
+              onGenerateDraft={handleGenerateStrategyDraft}
+              onToast={setToast}
+              demoMode={demoMode}
+              onPlanChanged={projectTree.refreshTree}
+            />
+          )}
+
+          {!isProjectNode && (
+          <>
+          {projectTree.activeNode && activePlan !== undefined && !planConfigured && projectTree.activeNode.projectId && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                border: '1px solid #c9a227', background: 'rgba(201, 162, 39, 0.10)',
+                padding: '10px 16px', borderRadius: 8, marginBottom: 12,
+              }}
+            >
+              <span style={{ color: '#c9a227', fontWeight: 600, fontSize: 13 }}>
+                ⚠ Dự án chưa có kế hoạch test — skill đang hiển thị đầy đủ mặc định. Cấu hình plan để bật gating theo stage.
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ whiteSpace: 'nowrap' }}
+                onClick={() => projectTree.setActiveNodeId(projectTree.activeNode.projectId)}
+              >
+                Tạo kế hoạch test →
               </button>
             </div>
-          </div>
+          )}
+
+          {decomposeResult && workspace.activeSkill === 'srs' && FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                border: `1px solid ${decomposeResult.status === 'error' ? '#e74c3c' : '#2ecc71'}`,
+                background: decomposeResult.status === 'error' ? 'rgba(231, 76, 60, 0.08)' : 'rgba(46, 204, 113, 0.08)',
+                padding: '10px 16px', borderRadius: 8, marginBottom: 12,
+              }}
+            >
+              <span style={{ color: decomposeResult.status === 'error' ? '#e74c3c' : '#2ecc71', fontWeight: 600, fontSize: 13 }}>
+                {decomposeResult.status === 'error'
+                  ? `⚠ Bóc tách Feature thất bại: ${decomposeResult.message}`
+                  : decomposeResult.count > 0
+                    ? `✅ Đã bóc tách ${decomposeResult.count} Feature mới: ${decomposeResult.names.join(', ')}`
+                    : '⚠ Không có Feature mới nào được tạo (có thể đã tồn tại sẵn, hoặc SRS chưa đủ chi tiết để bóc tách).'}
+              </span>
+              <button type="button" className="btn-secondary" onClick={() => setDecomposeResult(null)}>Ẩn</button>
+            </div>
+          )}
 
           <section className="panel">
             <div className="panel-header">
@@ -915,6 +1114,16 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 </button>
               </div>
             )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
+                <button className="btn-secondary" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
+                  {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
+                </button>
+              )}
+              <button className="btn-primary" onClick={generate} disabled={loading || batchGenLoading}>
+                {loading ? 'Đang xử lý...' : `Generate ${skill.label}`}
+              </button>
+            </div>
           </section>
 
           <section className="panel table-panel">
@@ -930,12 +1139,36 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                 {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={() => exportOutput('md')} disabled={!testCases.length}>MD</button>}
                 {workspace.activeSkill === 'testcase' && <button className="btn-secondary" onClick={copyForLark} disabled={!testCases.length}>Copy Lark</button>}
                 <button className="btn-secondary" onClick={() => exportOutput()} disabled={!workspace.output && !workspace.rawOutput}>Export</button>
+                {projectTree.activeNodeId && projectTree.activeNode && (
+                  <button
+                    className="btn-secondary"
+                    title="Tải toàn bộ test case đã lưu của node này (kèm mọi node con) ra CSV/Markdown"
+                    onClick={() => handleExportScopeFile({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}
+                  >⤓ Export cả nhánh</button>
+                )}
+                {projectTree.activeNodeId && projectTree.activeNode && (
+                  <button
+                    className="btn-secondary"
+                    title="Đẩy toàn bộ test case đã lưu của node này (kèm mọi node con) lên Lark Base"
+                    onClick={() => handleExportScopeLark({ id: projectTree.activeNodeId, name: projectTree.activeNode.name, type: projectTree.activeNode.type })}
+                  >🦊 Lark cả nhánh</button>
+                )}
                 {workspace.activeSkill === 'srs' && (workspace.output || workspace.rawOutput) && (
                   <button className="btn-primary" onClick={sendSrsToTestCase} title="Chuyển nội dung SRS sang skill Test Cases">
                     Viết Test Case →
                   </button>
                 )}
-                {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && testCases.length > 0 && (
+                {canDecomposeFeatures && (
+                  <button
+                    className="btn-primary"
+                    onClick={handleDecomposeFeatures}
+                    disabled={decomposing}
+                    title="Tách tài liệu SRS này thành từng Feature con và tạo node tương ứng trong cây dự án"
+                  >
+                    {decomposing ? 'Đang phân rã...' : 'Phân rã thành Feature'}
+                  </button>
+                )}
+                {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && (
                   <button className="btn-primary" onClick={handleSaveEditedTestCases} disabled={loading} title="Lưu lại toàn bộ chỉnh sửa test case của node này xuống cơ sở dữ liệu">
                     {loading ? 'Đang lưu...' : 'Lưu thay đổi'}
                   </button>
@@ -968,8 +1201,11 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               onSubmitClarifications={handleClarificationSubmit}
               loading={loading}
               onUpdateTestCases={handleUpdateTestCases}
+              nodePath={nodePathInfo}
             />
           </section>
+          </>
+          )}
         </section>
       </main>
 
@@ -1004,6 +1240,29 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           onClose={() => setLarkLinkOpen(false)}
           onConfirm={confirmLarkLink}
           loading={larkLinking}
+        />
+      )}
+      {createProject && (
+        <CreateProjectModal
+          systemId={createProject.systemId}
+          systemName={createProject.systemName}
+          onClose={() => setCreateProject(null)}
+          onCreated={handleProjectCreated}
+          onToast={setToast}
+        />
+      )}
+      {exportFileData && (
+        <ExportFileModal
+          data={exportFileData}
+          onClose={() => setExportFileData(null)}
+          onToast={setToast}
+        />
+      )}
+      {exportLarkTarget && (
+        <ExportLarkModal
+          scope={exportLarkTarget}
+          onClose={() => setExportLarkTarget(null)}
+          onToast={setToast}
         />
       )}
       {toast && <div className="toast show">{toast}</div>}

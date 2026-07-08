@@ -111,6 +111,8 @@ async function runColumnMigrations() {
     await ensureColumn('projects', 'lark_bug_table_id', "TEXT DEFAULT ''");
     await ensureColumn('projects', 'lark_source_url', "TEXT DEFAULT ''");
     await ensureColumn('nodes', 'abbreviation', "TEXT DEFAULT ''");
+    await ensureColumn('projects', 'system_id', 'TEXT');
+    await ensureColumn('test_cases', 'stage', "TEXT DEFAULT ''");
 }
 
 // ── Import từ JSON (migration một lần) ───────────────────────────────────────

@@ -299,6 +299,77 @@ async function saveTestCases(nodeId, newTCs, replace = false) {
   return getTestCases(nodeId);
 }
 
+// Collects test cases for an export/push SCOPE (system | project | module |
+// screen | feature). Always returns rows grouped by owning project — one group
+// for a single-node scope, one group per project for a system — so callers can
+// either flatten them (CSV) or fan out to one Lark table per project. Each row
+// is the raw test_cases row annotated with `_path` (module/screen/feature names
+// walked up the tree) for column filling. Pure DB read → 0 AI token.
+async function getTestCasesForScope(scopeType, scopeId) {
+  const allNodes = await dbAll('SELECT id, parent_id, type, name, project_id FROM nodes');
+  const nodeById = new Map(allNodes.map(n => [n.id, n]));
+
+  // itself + every descendant (BFS in memory, same approach as getDescendantNodeIds)
+  function descendantsOf(rootId) {
+    const ids = new Set([rootId]);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const n of allNodes) {
+        if (ids.has(n.parent_id) && !ids.has(n.id)) { ids.add(n.id); added = true; }
+      }
+    }
+    return Array.from(ids);
+  }
+  function pathFor(nodeId) {
+    const p = { module: '', screen: '', feature: '' };
+    let cur = nodeById.get(nodeId);
+    while (cur) {
+      if (cur.type === 'module' && !p.module) p.module = cur.name;
+      else if (cur.type === 'screen' && !p.screen) p.screen = cur.name;
+      else if (cur.type === 'feature' && !p.feature) p.feature = cur.name;
+      cur = cur.parent_id ? nodeById.get(cur.parent_id) : null;
+    }
+    return p;
+  }
+  async function rowsForNodeIds(ids) {
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = await dbAll(`SELECT * FROM test_cases WHERE node_id IN (${placeholders})`, ids);
+    return rows.map(r => ({ ...r, _path: pathFor(r.node_id) }));
+  }
+
+  const groups = [];
+  let scopeName = '';
+
+  if (scopeType === 'system') {
+    const sys = await dbGet('SELECT name FROM systems WHERE id = ?', [scopeId]);
+    scopeName = sys?.name || 'System';
+    const projects = await dbAll(
+      'SELECT id, name FROM projects WHERE system_id = ? ORDER BY created_at ASC',
+      [scopeId]
+    );
+    for (const p of projects) {
+      const rows = await rowsForNodeIds(descendantsOf(p.id));
+      groups.push({ projectId: p.id, projectName: p.name || 'Project', rows });
+    }
+  } else {
+    // scopeId is a node id. Group under its owning project (project node id === projects.id).
+    const rootNode = nodeById.get(scopeId);
+    scopeName = rootNode?.name || 'Scope';
+    const projectId = rootNode ? (rootNode.type === 'project' ? rootNode.id : rootNode.project_id) : null;
+    let projectName = rootNode?.name || 'Project';
+    if (projectId) {
+      const projRow = await dbGet('SELECT name FROM projects WHERE id = ?', [projectId]);
+      if (projRow?.name) projectName = projRow.name;
+    }
+    const rows = await rowsForNodeIds(descendantsOf(scopeId));
+    groups.push({ projectId: projectId || null, projectName, rows });
+  }
+
+  return { scopeType, scopeName, groups };
+}
+
 async function getTestCaseRevisions(testCaseId) {
   return dbAll('SELECT * FROM test_case_revisions WHERE test_case_id = ? ORDER BY version DESC', [testCaseId]);
 }
@@ -358,6 +429,7 @@ async function restoreRevision(testCaseId, version) {
 module.exports = {
   getTestCases,
   getTestCasesByStatus,
+  getTestCasesForScope,
   markLarkSynced,
   clearLarkSyncForProject,
   saveTestCases,

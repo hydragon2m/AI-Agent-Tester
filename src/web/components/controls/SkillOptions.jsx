@@ -6,14 +6,6 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
   if (activeSkill === 'testcase') {
     return (
       <div className="skill-options-row">
-        <label>
-          Priority
-          <select value={options.priority} onChange={e => patch({ priority: e.target.value })}>
-            <option>High</option>
-            <option>Medium</option>
-            <option>Low</option>
-          </select>
-        </label>
         <div className="toggle-group">
           {['Positive', 'Negative', 'Boundary', 'Edge Case', 'Security', 'UI/UX'].map(type => (
             <button
@@ -25,6 +17,13 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
             </button>
           ))}
         </div>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          title="Nếu bật: sau khi sinh TC sẽ tự gọi AI đánh giá chất lượng (tốn thêm ~1 lượt token). Nếu tắt: bấm nút 'Đánh giá chất lượng' ở Output khi cần."
+        >
+          <input type="checkbox" checked={!!options.autoAudit} onChange={e => patch({ autoAudit: e.target.checked })} />
+          Tự động đánh giá chất lượng (tốn thêm token)
+        </label>
       </div>
     );
   }
@@ -32,27 +31,17 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
   if (activeSkill === 'srs') {
     return (
       <div className="skill-options-row">
-        <label>
+        <label style={{ flex: 1 }}>
           Domain / Ngữ cảnh nghiệp vụ
           <input
             type="text"
             className="pf-input"
+            style={{ flex: 1, width: '100%' }}
             value={options.domain}
             onChange={e => patch({ domain: e.target.value })}
             placeholder="ví dụ: fast-track, transfer, esim... (tùy chọn)"
           />
         </label>
-        <div className="toggle-group">
-          {[{ value: 'full', label: 'Đầy đủ' }, { value: 'concise', label: 'Ngắn gọn' }].map(opt => (
-            <button
-              key={opt.value}
-              className={`toggle-btn ${options.detailLevel === opt.value ? 'active' : ''}`}
-              onClick={() => patch({ detailLevel: opt.value })}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
       </div>
     );
   }

@@ -36,11 +36,13 @@ function getAbbr(value) {
   return parts.map(p => p[0]).join('').substring(0, 4).toUpperCase();
 }
 
-export function toCsv(testCases, larkMapping = DEFAULT_LARK_MAPPING) {
-  const header = 'TC ID,Module,Test Case Name,Type,Priority,Suite,Automation,Trace To,Preconditions,Steps,Expected Result,Test Data,Status,Actual Result,Related Bug\n';
+export function toCsv(testCases, nodePath = {}, larkMapping = DEFAULT_LARK_MAPPING) {
+  const header = 'TC ID,Module,Screen,Feature,Test Case Name,Type,Priority,Suite,Automation,Trace To,Preconditions,Steps,Expected Result,Test Data,Status,Actual Result,Related Bug\n';
   const rows = testCases.map(tc => [
     tc.id || '',
-    tc.module || '',
+    nodePath.module || tc.module || '',
+    nodePath.screen || '',
+    nodePath.feature || '',
     tc.name || '',
     mapType(tc.type || '', larkMapping),
     mapPriority(tc.priority || '', larkMapping),
@@ -51,11 +53,87 @@ export function toCsv(testCases, larkMapping = DEFAULT_LARK_MAPPING) {
     (tc.steps || []).map((s, idx) => `${idx + 1}. ${s}`).join('\n'),
     tc.expectedResult || '',
     tc.testData || '',
-    '',
-    '',
-    '',
+    tc.status || '',
+    tc.actualResult || '',
+    tc.relatedBug || '',
   ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   return `\uFEFF${header}${rows}`;
+}
+
+// Columns shared with toCsv (kept in the same order). Scope export prepends an
+// optional "Project Name" column so a System-wide CSV can be filtered in Excel.
+const SCOPE_COLS = [
+  'TC ID', 'Module', 'Screen', 'Feature', 'Test Case Name', 'Type', 'Priority', 'Suite',
+  'Automation', 'Trace To', 'Preconditions', 'Steps', 'Expected Result', 'Test Data',
+  'Status', 'Actual Result', 'Related Bug',
+];
+
+function csvCell(v) {
+  return `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+}
+
+function scopeRowValues(tc) {
+  const p = tc.nodePath || {};
+  return [
+    tc.id || '',
+    p.module || tc.module || '',
+    p.screen || '',
+    p.feature || '',
+    tc.name || '',
+    mapType(tc.type || ''),
+    mapPriority(tc.priority || ''),
+    tc.suite || '',
+    tc.automationCandidate || '',
+    tc.traceTo || '',
+    tc.preconditions || '',
+    (tc.steps || []).map((s, idx) => `${idx + 1}. ${s}`).join('\n'),
+    tc.expectedResult || '',
+    tc.testData || '',
+    tc.status || '',
+    tc.actualResult || '',
+    tc.relatedBug || '',
+  ];
+}
+
+// Builds ONE CSV for a scope export. `groups` = [{ projectName, testCases[] }].
+// includeProjectName=true (System scope) prepends the Project Name column so
+// every project's rows land in a single file, filterable by project.
+export function scopeToCsv(groups, { includeProjectName = false } = {}) {
+  const cols = includeProjectName ? ['Project Name', ...SCOPE_COLS] : SCOPE_COLS;
+  const header = cols.join(',') + '\n';
+  const lines = [];
+  for (const g of groups || []) {
+    for (const tc of (g.testCases || [])) {
+      const values = scopeRowValues(tc);
+      const row = includeProjectName ? [g.projectName || '', ...values] : values;
+      lines.push(row.map(csvCell).join(','));
+    }
+  }
+  return `﻿${header}${lines.join('\n')}`;
+}
+
+// Markdown counterpart for a scope export. Sections per project when the scope
+// spans several (System); otherwise a single flat list.
+export function scopeToMarkdown(groups, { scopeName = 'Test Cases', includeProjectName = false } = {}) {
+  let md = `# ${scopeName}\n\n`;
+  const total = (groups || []).reduce((n, g) => n + (g.testCases?.length || 0), 0);
+  md += `_${total} test case${includeProjectName ? ` · ${(groups || []).length} project` : ''}_\n\n---\n\n`;
+  for (const g of groups || []) {
+    if (includeProjectName) md += `# ${g.projectName || 'Project'}\n\n`;
+    (g.testCases || []).forEach(tc => {
+      const p = tc.nodePath || {};
+      md += `## ${tc.id || ''}: ${tc.name || ''}\n\n`;
+      md += `**Type:** ${tc.type || ''} | **Priority:** ${tc.priority || ''} | **Status:** ${tc.status || ''}\n\n`;
+      const loc = [p.module || tc.module, p.screen, p.feature].filter(Boolean).join(' › ');
+      if (loc) md += `**Vị trí:** ${loc}\n\n`;
+      if (tc.preconditions) md += `**Preconditions:** ${tc.preconditions}\n\n`;
+      md += `**Steps:**\n${(tc.steps || []).map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\n`;
+      md += `**Expected Result:** ${tc.expectedResult || ''}\n\n`;
+      if (tc.testData) md += `**Test Data:** ${tc.testData}\n\n`;
+      md += `---\n\n`;
+    });
+  }
+  return md;
 }
 
 export function toMarkdown(data) {
@@ -108,9 +186,9 @@ export function toLarkClipboardPayload(data, path = [], larkMapping = DEFAULT_LA
       stepsHtml,
       tc.expectedResult || '',
       tc.testData || '',
-      '',
-      '',
-      '',
+      tc.status || '',
+      tc.actualResult || '',
+      tc.relatedBug || '',
     ];
     return `<tr>${cells.map((c, i) => `<td style="padding:8px 12px;border:1px solid #334155;vertical-align:top;">${i === 8 ? c : escapeHtml(c)}</td>`).join('')}</tr>`;
   }).join('');
@@ -131,9 +209,9 @@ export function toLarkClipboardPayload(data, path = [], larkMapping = DEFAULT_LA
       (tc.steps || []).map((s, i) => `${i + 1}. ${s}`).join(' | '),
       tc.expectedResult || '',
       tc.testData || '',
-      '',
-      '',
-      '',
+      tc.status || '',
+      tc.actualResult || '',
+      tc.relatedBug || '',
     ].map(v => String(v).replace(/\t/g, ' ')).join('\t');
   }).join('\n');
 

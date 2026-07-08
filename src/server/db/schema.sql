@@ -1,9 +1,20 @@
 -- AI QA Assistant SQLite Schema
 
+-- Systems Table (cấp ngoài cùng của cây: System -> Project -> Module -> Screen -> Feature)
+-- Không FK để tránh cascade; project trỏ về system qua projects.system_id (nullable = chưa gán / legacy)
+CREATE TABLE IF NOT EXISTS systems (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
 -- Projects Table
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    system_id TEXT,
     context TEXT,
     stack TEXT,
     framework TEXT,
@@ -44,6 +55,7 @@ CREATE TABLE IF NOT EXISTS test_cases (
     type TEXT CHECK(type IN ('Positive', 'Negative', 'Boundary', 'Edge Case', 'Security', 'UI/UX')),
     priority TEXT CHECK(priority IN ('High', 'Medium', 'Low')),
     suite TEXT CHECK(suite IN ('Smoke', 'Regression', 'New Feature', 'Exploratory')),
+    stage TEXT DEFAULT '', -- activity/stage của Test Plan (api/smoke/manual/regression/performance/security) — dùng cho release-check
     automation_candidate TEXT CHECK(automation_candidate IN ('Yes', 'No')),
     trace_to TEXT,
     preconditions TEXT,
@@ -116,6 +128,26 @@ CREATE TABLE IF NOT EXISTS snippets (
     created_at TEXT NOT NULL,
     updated_at TEXT
 );
+
+-- Test Strategies Table (F6/F7 — 1 strategy per project node, kế thừa xuống module/screen)
+-- stages_json: array of { key, activity, stageType, enabled, trigger, skills[], entryCriteria, exitCriteria }
+-- execution_plan_json: { sprintMap[], ownerMap[], priorityOrder[] }
+CREATE TABLE IF NOT EXISTS test_strategies (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    node_id TEXT,
+    template TEXT,
+    summary TEXT DEFAULT '',
+    stages_json TEXT,
+    execution_plan_json TEXT,
+    release_gate TEXT DEFAULT '',
+    status TEXT DEFAULT 'draft',
+    approved_by TEXT DEFAULT '',
+    approved_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_test_strategies_project ON test_strategies(project_id, created_at);
 
 -- Provider Settings Table (managed via environment variables first, but ready for DB fallback)
 CREATE TABLE IF NOT EXISTS provider_settings (
