@@ -9,12 +9,14 @@ export async function requestJson(url, options = {}) {
   });
   const bodyText = await res.text().catch(() => '');
   let body = null;
+  let parseError = false;
   try {
     body = bodyText ? JSON.parse(bodyText) : null;
   } catch (err) {
+    parseError = true;
     body = { error: bodyText };
   }
-  if (!res.ok) {
+  if (!res.ok || parseError) {
     const message = body?.message || body?.error || bodyText || `HTTP ${res.status}`;
     throw new Error(message);
   }

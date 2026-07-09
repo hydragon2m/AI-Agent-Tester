@@ -10,7 +10,7 @@
     "check": "node --check src/server/app.js && npm run build",
     "test": "npm run check",
     "tauri": "tauri",
-    "pkg:server": "pkg src/server/app.js --out-path src-tauri/binaries --no-bytecode --public --public-packages \"*\""
+    "pkg:server": "pkg src/server/app.js -o src-tauri/binaries/hydra-server --no-bytecode --public --public-packages \"*\" && node -e \"const fs = require('fs'); const renames = [['src-tauri/binaries/hydra-server-win.exe', 'src-tauri/binaries/hydra-server.exe'], ['src-tauri/binaries/hydra-server-macos', 'src-tauri/binaries/hydra-server'], ['src-tauri/binaries/hydra-server-linux', 'src-tauri/binaries/hydra-server']]; renames.forEach(([oldPath, newPath]) => { if (fs.existsSync(oldPath)) { if (fs.existsSync(newPath)) fs.unlinkSync(newPath); fs.renameSync(oldPath, newPath); } });\""
   },
   "pkg": {
     "scripts": "src/server/**/*.js",
