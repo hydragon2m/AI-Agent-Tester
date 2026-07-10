@@ -2,7 +2,10 @@
 // gặp "high demand"/503 (spike tạm thời). Quota (429/RESOURCE_EXHAUSTED) ném
 // QUOTA_EXCEEDED ngay để lớp trên xoay key / fallback provider.
 async function callGeminiSingle(systemPrompt, userContent, key, image, expectJson) {
-  const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+  // Thử gemini-3 trước (một số key/token đời mới CHỈ dùng được gemini-3, các model
+  // 2.x báo "no longer available to new users"), rồi rơi về 2.x cho key AIza thường.
+  // Model không khả dụng (404) sẽ bị bỏ qua nhanh để sang model kế.
+  const MODELS = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 
   const parts = image
     ? [{ inline_data: { mime_type: image.mediaType, data: image.data } }, { text: userContent }]
@@ -25,6 +28,7 @@ async function callGeminiSingle(systemPrompt, userContent, key, image, expectJso
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const MAX_ATTEMPTS_PER_MODEL = 3; // "high demand" là spike TẠM THỜI → thử lại cùng model sau backoff
   let lastMsg = '';
+  let sawQuota = false; // free-tier có quota RIÊNG từng model → chỉ báo hết quota khi MỌI model đều hết
 
   for (const model of MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
@@ -48,8 +52,14 @@ async function callGeminiSingle(systemPrompt, userContent, key, image, expectJso
       const isTransient = res.status === 503 || errMsg.includes('high demand')
         || errMsg.includes('overloaded') || errMsg.includes('UNAVAILABLE');
 
-      // Hết quota: retry cùng key vô ích (quota tính theo key) → ném ngay để xoay key/provider.
-      if (isQuota) throw new Error('QUOTA_EXCEEDED');
+      // Hết quota model NÀY: quota free-tier tính theo TỪNG model → còn model khác
+      // có thể vẫn còn quota → chuyển model kế (KHÔNG ném ngay). Chỉ đánh dấu để
+      // nếu hết sạch model thì mới báo QUOTA_EXCEEDED (cho lớp trên xoay key).
+      if (isQuota) {
+        sawQuota = true;
+        console.log(`[Gemini Provider] ${model} hết quota, thử model kế tiếp...`);
+        break;
+      }
 
       // Quá tải tạm thời: chờ backoff rồi thử LẠI cùng model.
       if (isTransient && attempt < MAX_ATTEMPTS_PER_MODEL - 1) {
@@ -65,6 +75,8 @@ async function callGeminiSingle(systemPrompt, userContent, key, image, expectJso
     }
   }
 
+  // Đã thử hết model. Nếu có model hết quota → báo QUOTA_EXCEEDED để xoay key.
+  if (sawQuota) throw new Error('QUOTA_EXCEEDED');
   const e = new Error(lastMsg || 'Gemini generation failed');
   e.geminiOverloaded = /high demand|overloaded|UNAVAILABLE|503/i.test(lastMsg);
   throw e;
