@@ -35,15 +35,14 @@ export function ProviderSettingsModal({ form, setForm, larkMapping, setLarkMappi
                 <div className="w-8 h-8 rounded bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">G</div>
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-slate-200">Gemini API Key</span>
-                  <span className="text-[10px] text-slate-400">{form.gemini.hasKey ? 'Đã có key trên server' : 'Chưa có key'}</span>
+                  <span className="text-[10px] text-slate-400">{form.gemini.hasKey ? 'Đã có key trên server' : 'Chưa có key'} · nhập NHIỀU key (mỗi dòng 1 key) để tự xoay khi hết quota/quá tải</span>
                 </div>
               </div>
-              <input 
-                className="w-full h-9 px-3 rounded-md border border-border bg-slate-900 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" 
-                type="password" 
-                value={form.gemini.key} 
-                onChange={e => update('gemini', { key: e.target.value })} 
-                placeholder={form.gemini.hasKey ? 'Để trống để giữ key cũ' : 'Nhập API key'} 
+              <textarea
+                className="w-full min-h-[72px] px-3 py-2 rounded-md border border-border bg-slate-900 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={form.gemini.key}
+                onChange={e => update('gemini', { key: e.target.value })}
+                placeholder={form.gemini.hasKey ? 'Để trống để giữ key cũ. Dán thêm key mới, mỗi dòng 1 key...' : 'Nhập API key (có thể dán nhiều key, mỗi dòng 1 key)'}
               />
             </div>
           )}
