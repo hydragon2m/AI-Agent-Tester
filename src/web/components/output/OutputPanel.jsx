@@ -9,7 +9,33 @@ import { Button } from '../ui/Button';
 import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
 function ClarificationForm({ questions, onSubmit, loading }) {
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] = useState(() => {
+    const initial = {};
+    questions.forEach(q => {
+      const match = q.text.match(/Gợi\s+ý\s*:\s*(.+)$/i);
+      if (match) {
+        initial[q.label] = match[1].trim();
+      } else {
+        initial[q.label] = '';
+      }
+    });
+    return initial;
+  });
+
+  React.useEffect(() => {
+    setAnswers(prev => {
+      const next = { ...prev };
+      questions.forEach(q => {
+        if (next[q.label] === undefined || next[q.label] === '') {
+          const match = q.text.match(/Gợi\s+ý\s*:\s*(.+)$/i);
+          if (match) {
+            next[q.label] = match[1].trim();
+          }
+        }
+      });
+      return next;
+    });
+  }, [questions]);
 
   function handleSubmit(e) {
     e.preventDefault();

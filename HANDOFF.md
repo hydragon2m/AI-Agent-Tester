@@ -5,6 +5,23 @@
 
 ---
 
+## Session hiện tại: 2026-07-10 — Sửa lỗi không gen được SRS do Gemini 503 (High Demand)
+
+### 1. Task đã hoàn thành
+- **Sửa lỗi không nhận phản hồi khi gen SRS**:
+  - Phát hiện nguyên nhân: Model mặc định `gemini-flash-latest` (Gemini 1.5 Flash) gặp lỗi `503 (This model is currently experiencing high demand)`. Do logic `isRetryable` trong `gemini.provider.js` không bắt được mã lỗi `503` hoặc từ khóa "high demand", hệ thống không kích hoạt cơ chế retry/fallback. Đồng thời, fallback provider tiếp theo là `codex` bị lỗi hết hạn mức (out of quota), dẫn đến toàn bộ quá trình generate bị crash/không ghi nhận vào database.
+  - Giải pháp:
+    1. Cập nhật `src/server/ai/providers/gemini.provider.js`: Đưa model `gemini-2.5-flash` lên làm mặc định đầu tiên.
+    2. Nâng cấp logic `isRetryable` hỗ trợ retry khi gặp lỗi 503, "high demand", "overloaded".
+    3. Khởi động lại backend server.
+  - Kết quả: Đã test gọi API generate thành công, Gemini phản hồi kết quả 200 trơn tru.
+- **Cải tiến phần câu hỏi làm rõ SRS**:
+  - **Giới hạn số vòng hỏi**: Thay đổi prompt trong `skill-registry.js` (cả system prompt của `srs` và `buildFinalizePrompt`) để ép buộc AI chỉ được hỏi tối đa 1 vòng làm rõ duy nhất. Khi nhận được câu trả lời từ người dùng, AI bắt buộc phải viết SRS hoàn chỉnh và đưa ra các giả định hợp lý gắn tag `[GIẢ ĐỊNH]` cho bất cứ chi tiết nào còn thiếu, thay vì tiếp tục chèn hộp câu hỏi làm rõ.
+  - **Gợi ý câu trả lời sẵn vào form**: Nâng cấp component `ClarificationForm` trong `OutputPanel.jsx` để tự động bóc tách các đoạn gợi ý câu trả lời từ text của câu hỏi (dạng `Gợi ý: ...` hoặc `Gợi ý :...`) và điền sẵn vào ô textarea làm giá trị mặc định, giúp người dùng có thể submit ngay hoặc chỉnh sửa nhanh chóng.
+
+---
+
+
 ## Session hiện tại: 2026-07-09 — Tích hợp Tailwind v3, shadcn/ui components và dọn dẹp các icon button rườm rà
 
 ### 1. Task đã hoàn thành
