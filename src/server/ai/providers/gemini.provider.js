@@ -1,5 +1,5 @@
 async function callGemini(systemPrompt, userContent, key, retryCount = 0, image, expectJson = false) {
-  const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+  const MODELS = ['gemini-2.5-flash', 'gemini-flash-latest'];
   const model = MODELS[Math.min(retryCount, MODELS.length - 1)];
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
@@ -35,9 +35,10 @@ async function callGemini(systemPrompt, userContent, key, retryCount = 0, image,
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const errMsg = err?.error?.message || `HTTP ${res.status}`;
-    const isRetryable = res.status === 429 || res.status === 404
+    const isRetryable = res.status === 429 || res.status === 404 || res.status === 503
       || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')
-      || errMsg.includes('not found') || errMsg.includes('not supported');
+      || errMsg.includes('not found') || errMsg.includes('not supported')
+      || errMsg.includes('high demand') || errMsg.includes('overloaded');
 
     if (isRetryable && retryCount < MODELS.length - 1) {
       console.log(`[Gemini Provider] Retrying model ${MODELS[retryCount + 1]}...`);

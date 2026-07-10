@@ -981,9 +981,9 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
 
         <section className="web-workspace">
           {!isProjectNode && projectTree.activeNode && (
-            <div className="sticky top-0 z-30 bg-[#09090b] flex items-center justify-between h-[52px] border-b border-zinc-800 -mx-6 px-6 mb-4">
+            <div className="sticky top-0 z-30 bg-[#09090b] flex items-center justify-between h-[52px] border-b border-zinc-800 -mx-6 -mt-5 px-6 mb-4">
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider shrink-0">Skills</span>
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider shrink-0" style={{ fontSize: '10px' }}>Skills</span>
                 <div className="inline-flex h-9 items-center justify-start rounded-lg bg-zinc-900/80 p-1 text-zinc-400 w-max max-w-full overflow-x-auto border border-zinc-800/40">
                   {Object.entries(SKILLS)
                     .filter(([key]) => key !== 'srsdecomposer' && key !== 'teststrategy')

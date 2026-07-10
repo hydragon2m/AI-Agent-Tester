@@ -19,8 +19,8 @@ QUY TẮC BẮT BUỘC:
    > - *Câu hỏi 1*: [Mô tả chi tiết câu hỏi, ví dụ: Bạn muốn có những Trạng thái sản phẩm cụ thể nào? Gợi ý: Hoạt động, Ngừng hoạt động, Bản nháp...]
    > - *Câu hỏi 2*: [Ví dụ: Thao tác hàng loạt gồm những hành động gì? Gợi ý: Xóa hàng loạt, Cập nhật trạng thái hàng loạt...]
    KHÔNG được tự ý suy đoán các giá trị cụ thể này nếu đề bài không cho. Đồng thời, vẫn ghi nhận các dòng tương ứng vào bảng ở phần "8. Điểm chưa rõ — Cần xác nhận" ở cuối tài liệu.
-   QUAN TRỌNG — mỗi VÒNG hỏi phải hỏi hết trong 1 lượt, không hỏi nhỏ giọt: mỗi khi chèn hộp này (dù là vòng đầu tiên hay các vòng hỏi tiếp theo sau khi user đã trả lời — xem quy tắc "SAU KHI USER ĐÃ TRẢ LỜI" ngay dưới đây), PHẢI rà soát và liệt kê NGAY MỘT LẦN toàn bộ câu hỏi cần thiết ở vòng đó (actor/role, hành động chính, trạng thái/state, validation, ràng buộc nghiệp vụ, phân quyền, số liệu cụ thể...) — không được chỉ hỏi 1-2 câu rồi để dành câu khác hỏi ở lượt sau nếu lẽ ra đã có thể hỏi ngay.
-   SAU KHI USER ĐÃ TRẢ LỜI (có thể lặp lại qua nhiều vòng): nếu input được cung cấp có chứa heading "### CÂU TRẢ LỜI LÀM RÕ" (nghĩa là user đã trả lời các câu hỏi làm rõ ở (các) vòng trước), bạn TUYỆT ĐỐI KHÔNG được hỏi lại các câu đã có câu trả lời. Sau đó đánh giá lại: nếu câu trả lời mới vẫn để lộ (hoặc phát sinh thêm) thiếu sót business-critical thật sự — tức là thiếu thông tin về trạng thái/state, validation, ràng buộc nghiệp vụ, phân quyền, số liệu cụ thể... mà thiếu thì QA KHÔNG thể viết đúng test case — bạn ĐƯỢC PHÉP và NÊN tiếp tục hỏi: chèn lại hộp "[CÂU HỎI LÀM RÕ]" liệt kê TOÀN BỘ câu hỏi MỚI cần thiết trong 1 lần duy nhất (không hỏi nhỏ giọt, không lặp lại câu đã hỏi ở vòng trước), và KHÔNG viết SRS ở vòng này — quá trình này được phép lặp lại qua nhiều vòng cho đến khi không còn khúc mắc business-critical nào. CHỈ khi không còn câu hỏi business-critical nào cần hỏi thêm thì mới viết SRS đầy đủ và không chèn hộp câu hỏi nữa. Với những chi tiết thật sự nhỏ/cosmetic không ảnh hưởng tới việc viết test case (ví dụ câu chữ label, thứ tự hiển thị không quan trọng), tự đưa ra giả định hợp lý, gắn tag "[GIẢ ĐỊNH]" ngay tại chỗ dùng, và liệt kê ở mục "8. Điểm chưa rõ" — KHÔNG được dùng "[GIẢ ĐỊNH]" để né tránh hỏi cho các thiếu sót business-critical.
+   QUAN TRỌNG — bạn chỉ được hỏi 1 vòng duy nhất để thu thập tất cả thông tin còn thiếu.
+   SAU KHI USER ĐÃ TRẢ LỜI (vòng chốt): Bạn BẮT BUỘC phải viết bản SRS hoàn chỉnh và TUYỆT ĐỐI không được hỏi thêm bất kỳ câu hỏi nào (không chèn hộp [CÂU HỎI LÀM RÕ] nữa). Kết hợp các câu trả lời mới để hoàn thành SRS. Với mọi chi tiết còn khuyết hoặc chưa rõ, hãy tự đưa ra giả định hợp lý, gắn tag "[GIẢ ĐỊNH]" và liệt kê ở mục 8. KHÔNG được hỏi đi hỏi lại.
 3. KHÔNG dùng ngôn ngữ mơ hồ như "hệ thống sẽ xử lý phù hợp", "thực hiện đúng cách" — phải có con số, trạng thái, điều kiện cụ thể.
 4. Nếu input là ảnh wireframe/mockup: mô tả CHI TIẾT từng element nhìn thấy — không bỏ sót field, nút, label, badge, icon, tooltip nào. Nếu input CHỈ có ảnh (không có text), phải đọc kỹ ảnh để tự suy luận toàn bộ luồng và yêu cầu.
 5. Mọi Acceptance Criteria viết theo format: "GIVEN <điều kiện ban đầu> WHEN <hành động> THEN <kết quả mong đợi>".
@@ -137,10 +137,10 @@ ${previousSrs}
 ${answersMarkdown}
 
 NHIỆM VỤ:
-Người dùng vừa trả lời các câu hỏi làm rõ ở trên (có thể không phải vòng đầu tiên). Áp dụng đúng quy tắc "SAU KHI USER ĐÃ TRẢ LỜI" trong system prompt (mục Quy tắc bắt buộc #2):
-- TUYỆT ĐỐI KHÔNG hỏi lại các câu đã được trả lời ở trên.
-- Nếu câu trả lời mới vẫn để lộ hoặc phát sinh thêm thiếu sót business-critical (trạng thái, validation, phân quyền, ràng buộc nghiệp vụ, số liệu cụ thể...) khiến QA không viết đúng được test case → chèn lại hộp "[CÂU HỎI LÀM RÕ]" liệt kê TOÀN BỘ câu hỏi MỚI cần thiết trong 1 lần duy nhất, KHÔNG viết SRS ở vòng này.
-- Nếu không còn khúc mắc business-critical nào → viết lại HOÀN CHỈNH tài liệu SRS theo đúng cấu trúc 9 section đã quy định trong system prompt, chỉ cập nhật/bổ sung các phần liên quan trực tiếp tới câu trả lời, giữ nguyên nội dung các phần không liên quan. Với chi tiết cosmetic/không ảnh hưởng test case còn thiếu, tự đưa ra giả định hợp lý gắn "[GIẢ ĐỊNH]" và liệt kê ở mục 8.
+Người dùng đã trả lời các câu hỏi làm rõ. Bạn BẮT BUỘC phải viết lại bản SRS HOÀN CHỈNH đầy đủ.
+- TUYỆT ĐỐI KHÔNG chèn hộp "[CÂU HỎI LÀM RÕ]" nữa, không được hỏi thêm bất kỳ câu hỏi nào.
+- Hãy kết hợp các câu trả lời của người dùng để hoàn thiện tài liệu SRS theo đúng cấu trúc 9 section đã quy định trong system prompt.
+- Với những chi tiết còn thiếu hoặc chưa rõ, tự đưa ra giả định hợp lý, gắn tag "[GIẢ ĐỊNH]" và liệt kê ở mục 8.
 Ngôn ngữ: Tiếng Việt (thuật ngữ kỹ thuật giữ nguyên tiếng Anh).`;
     },
   },
