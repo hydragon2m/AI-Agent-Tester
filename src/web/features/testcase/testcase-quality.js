@@ -88,27 +88,18 @@ function applyChanges(testCase, changes) {
 
 export function sortTestCases(tcs) {
   if (!Array.isArray(tcs)) return [];
-  return [...tcs].sort((a, b) => {
-    // 1. Sort by module (feature area)
-    const modA = String(a.module || '').toLowerCase();
-    const modB = String(b.module || '').toLowerCase();
-    if (modA !== modB) return modA.localeCompare(modB);
-
-    // 2. Sort by name
-    const nameA = String(a.name || '').toLowerCase();
-    const nameB = String(b.name || '').toLowerCase();
-    if (nameA !== nameB) return nameA.localeCompare(nameB);
-
-    // 3. Sort by type
-    const typeA = String(a.type || '').toLowerCase();
-    const typeB = String(b.type || '').toLowerCase();
-    if (typeA !== typeB) return typeA.localeCompare(typeB);
-
-    // 4. Sort by ID
-    const idA = String(a.id || '').toLowerCase();
-    const idB = String(b.id || '').toLowerCase();
-    return idA.localeCompare(idB);
-  });
+  // GIỮ NGUYÊN thứ tự AI sinh (tổng quan → chi tiết: happy path trước, rồi
+  // negative/boundary/edge/security/UI). Chỉ GOM các TC cùng module lại gần nhau
+  // theo thứ tự module xuất hiện lần đầu — KHÔNG sort alphabet theo name (cách cũ
+  // đẩy "Boundary..." lên trước "Happy Path..." làm xáo trộn luồng logic).
+  const moduleOrder = [];
+  const groups = new Map();
+  for (const tc of tcs) {
+    const key = String(tc.module || '');
+    if (!groups.has(key)) { groups.set(key, []); moduleOrder.push(key); }
+    groups.get(key).push(tc);
+  }
+  return moduleOrder.flatMap(k => groups.get(k));
 }
 
 export function buildFinalTestCases(originalTCs, reviews, decisions, newSuggestionDecisions, newSuggestions, renumberFn) {

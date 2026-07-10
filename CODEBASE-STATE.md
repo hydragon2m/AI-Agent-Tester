@@ -293,6 +293,7 @@ if (lastSrsRun) {
 - Output TC có thể kèm `openQuestions[]`. `OutputPanel.jsx` render **`TcClarificationForm`**: câu hỏi có phương án gợi ý (AI xuất "Câu hỏi? Gợi ý: A / B / C" — quy tắc trong system prompt testcase) → `parseTcQuestion` tách thành **chip bấm chọn** (chọn nhiều) + ô "Khác"; câu mở → textarea. Submit → `handleTcClarificationSubmit` (main.jsx) gộp Q&A → `appendTestCases(note)`.
 - **Bổ sung TC**: `appendTestCases(noteOverride?)` (main.jsx) gửi TC hiện có + ghi chú → AI chỉ sinh case MỚI (không lặp) → merge + lưu. Ô "Bổ sung thêm" thủ công dùng chung hàm này (guard `typeof noteOverride === 'string'` vì onClick truyền event).
 - **Auto-save**: sửa TC trong bảng chỉ cập nhật state (`handleUpdateTestCases`); phải bấm "Lưu thay đổi" (`handleSaveEditedTestCases`) mới ghi DB. Lịch sử = `skill_runs` (0 token).
+- **Thứ tự + số lượng + suite (2026-07-10)**: `sortTestCases` (testcase-quality.js) GIỮ NGUYÊN thứ tự AI sinh (tổng quan→chi tiết), chỉ gom theo module — KHÔNG sort alphabet theo name. Prompt testcase: sinh theo độ phủ (không giới hạn cứng số case), thứ tự Positive→Negative→Boundary→Edge→Security→UI/UX. `suite` (Smoke/Regression/New Feature/Exploratory) chỉ là metadata lưu+export, KHÔNG điều khiển logic (gating dùng `test_cases.stage`).
 
 ---
 

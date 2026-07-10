@@ -185,11 +185,12 @@ ${input}
 
 Yêu cầu:
 - Ngôn ngữ output: Tiếng Việt.
-- Tối đa 20 test cases.
+- SỐ LƯỢNG theo ĐỘ PHỦ (không giới hạn cứng): sinh ĐỦ test case để cover TOÀN BỘ các nhánh của chức năng — mọi happy path, mọi luồng validation/Negative, Boundary (giá trị biên), Edge Case, Security, và UI/UX quan trọng; bao gồm cả yêu cầu ẩn/[SUY LUẬN] trong spec. KHÔNG bỏ sót nhánh nào. Đồng thời KHÔNG nhồi case trùng lặp/tầm thường — mỗi case phải atomic, độc lập, có giá trị kiểm thử riêng.
+- THỨ TỰ test case: sắp xếp theo trình tự TỔNG QUAN → CHI TIẾT. Bắt đầu bằng (các) happy path / luồng chính (Positive) bao quát chức năng, RỒI mới tới validation/Negative, Boundary, Edge Case, Security, và cuối cùng UI/UX. Các case cùng một kịch bản/thành phần phải đứng liền nhau (đừng nhảy cóc qua lại). GIỮ ĐÚNG thứ tự này trong mảng "testCases".
 - Test types mong muốn: ${options.types.join(', ') || 'Functional, Negative, Edge Case'}.
 - type chỉ dùng: Positive | Negative | Boundary | Edge Case | Security | UI/UX.
 - priority chỉ dùng: High | Medium | Low.
-- suite chỉ dùng: Smoke | Regression | New Feature | Exploratory.
+- suite (nhóm mục đích chạy) chỉ dùng: Smoke (luồng chính tối quan trọng, chạy nhanh xác nhận build sống) | Regression (case cần chạy lại để chống hồi quy — mặc định) | New Feature (case cho tính năng mới) | Exploratory (kiểm thử khám phá). Gán happy path cốt lõi = Smoke; phần lớn còn lại = Regression.
 - automationCandidate chỉ dùng: Yes | No.`;
     },
   },
