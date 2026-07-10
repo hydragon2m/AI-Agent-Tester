@@ -18,6 +18,10 @@
 - **Cải tiến phần câu hỏi làm rõ SRS**:
   - **Giới hạn số vòng hỏi**: Thay đổi prompt trong `skill-registry.js` (cả system prompt của `srs` và `buildFinalizePrompt`) để ép buộc AI chỉ được hỏi tối đa 1 vòng làm rõ duy nhất. Khi nhận được câu trả lời từ người dùng, AI bắt buộc phải viết SRS hoàn chỉnh và đưa ra các giả định hợp lý gắn tag `[GIẢ ĐỊNH]` cho bất cứ chi tiết nào còn thiếu, thay vì tiếp tục chèn hộp câu hỏi làm rõ.
   - **Gợi ý câu trả lời sẵn vào form**: Nâng cấp component `ClarificationForm` trong `OutputPanel.jsx` để tự động bóc tách các đoạn gợi ý câu trả lời từ text của câu hỏi (dạng `Gợi ý: ...` hoặc `Gợi ý :...`) và điền sẵn vào ô textarea làm giá trị mặc định, giúp người dùng có thể submit ngay hoặc chỉnh sửa nhanh chóng.
+- **Sửa lỗi Bóc tách Feature thất bại do JSON Code Fences**:
+  - Phát hiện nguyên nhân: Trong logic `parseAiJson` của `testcase-parser.js`, hệ thống dùng Regex để trích xuất JSON trong code fences (```` ```json ... ``` ````) trước. Nếu kết quả trả về từ Gemini là một mảng JSON thô (khi truyền `expectJson: true`) nhưng bên trong nội dung markdown của một trường nào đó (như `srsSegment`) lại chứa khối code block (ví dụ: text diagram nằm trong code fences), Regex sẽ bắt nhầm khối code block nội bộ đó làm chuỗi JSON chính, gây lỗi cú pháp khi parse.
+  - Giải pháp: Cập nhật hàm `parseAiJson` để ưu tiên thử parse trực tiếp (`JSON.parse`) trước nếu dữ liệu bắt đầu bằng ký tự mở ngoặc mảng `[` hoặc đối tượng `{`. Chỉ khi parse trực tiếp thất bại mới tìm kiếm và trích xuất qua Regex code fences.
+  - Kết quả: Build & test hoàn tất, bóc tách SRS chứa code fences hoạt động bình thường.
 
 ---
 
