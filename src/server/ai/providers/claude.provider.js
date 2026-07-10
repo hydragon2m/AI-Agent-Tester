@@ -12,11 +12,18 @@ async function callClaude(systemPrompt, userContent, key, image) {
       'Content-Type': 'application/json',
       'x-api-key': key,
       'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'prompt-caching-2024-07-31',
     },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-latest',
       max_tokens: 8192,
-      system: systemPrompt,
+      system: [
+        {
+          type: 'text',
+          text: systemPrompt,
+          cache_control: { type: 'ephemeral' }
+        }
+      ],
       messages: [{ role: 'user', content }],
     }),
   });

@@ -19,6 +19,17 @@ export function SkillOptions({ activeSkill, options, setOptions }) {
         </div>
         <label
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          title="Mức độ phủ khi gen TC. Nhanh = ít case, tiết kiệm token. Đầy đủ = cover hết nhánh, tốn token nhất."
+        >
+          Độ phủ
+          <select value={options.coverage || 'balanced'} onChange={e => patch({ coverage: e.target.value })} style={{ fontSize: 12 }}>
+            <option value="fast">Nhanh (~10, ít token)</option>
+            <option value="balanced">Cân bằng (~20)</option>
+            <option value="full">Đầy đủ (không giới hạn)</option>
+          </select>
+        </label>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
           title="Nếu bật: sau khi sinh TC sẽ tự gọi AI đánh giá chất lượng (tốn thêm ~1 lượt token). Nếu tắt: bấm nút 'Đánh giá chất lượng' ở Output khi cần."
         >
           <input type="checkbox" checked={!!options.autoAudit} onChange={e => patch({ autoAudit: e.target.checked })} />

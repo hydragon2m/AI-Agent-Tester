@@ -176,6 +176,11 @@ Chỉ trả về duy nhất 1 block JSON hợp lệ có schema:
 }
 QUY TẮC openQuestions: mỗi phần tử là 1 chuỗi. NẾU câu hỏi có tập phương án khả dĩ hữu hạn (ví dụ giá trị mặc định, số lượng, có/không, danh sách trạng thái/thao tác) → BẮT BUỘC gợi ý các phương án ở CUỐI câu theo đúng định dạng "Câu hỏi? Gợi ý: A / B / C" (ngăn cách bằng dấu "/") để người dùng chọn nhanh thay vì gõ tay. Chỉ để câu hỏi mở (không kèm "Gợi ý:") khi thực sự không thể liệt kê phương án.`,
     buildPrompt(input, context, options) {
+      const coverageRule = {
+        fast: '- SỐ LƯỢNG (mức NHANH): tối đa ~10 test case, CHỈ tập trung happy path chính + các case Negative/rủi ro quan trọng nhất. Không cần cover mọi nhánh nhỏ.',
+        balanced: '- SỐ LƯỢNG (mức CÂN BẰNG): khoảng 15-20 test case, cover các nhánh chính (happy path, validation/Negative, Boundary, Edge Case quan trọng). Không nhồi case trùng lặp/tầm thường.',
+        full: '- SỐ LƯỢNG (mức ĐẦY ĐỦ, không giới hạn cứng): sinh ĐỦ test case để cover TOÀN BỘ các nhánh của chức năng — mọi happy path, mọi luồng validation/Negative, Boundary (giá trị biên), Edge Case, Security, và UI/UX quan trọng; bao gồm cả yêu cầu ẩn/[SUY LUẬN] trong spec. KHÔNG bỏ sót nhánh nào. Đồng thời KHÔNG nhồi case trùng lặp/tầm thường — mỗi case phải atomic, độc lập, có giá trị kiểm thử riêng.',
+      }[options.coverage || 'balanced'];
       return `${context}
 
 FUNCTIONAL SPEC:
@@ -185,7 +190,7 @@ ${input}
 
 Yêu cầu:
 - Ngôn ngữ output: Tiếng Việt.
-- SỐ LƯỢNG theo ĐỘ PHỦ (không giới hạn cứng): sinh ĐỦ test case để cover TOÀN BỘ các nhánh của chức năng — mọi happy path, mọi luồng validation/Negative, Boundary (giá trị biên), Edge Case, Security, và UI/UX quan trọng; bao gồm cả yêu cầu ẩn/[SUY LUẬN] trong spec. KHÔNG bỏ sót nhánh nào. Đồng thời KHÔNG nhồi case trùng lặp/tầm thường — mỗi case phải atomic, độc lập, có giá trị kiểm thử riêng.
+${coverageRule}
 - THỨ TỰ test case: sắp xếp theo trình tự TỔNG QUAN → CHI TIẾT. Bắt đầu bằng (các) happy path / luồng chính (Positive) bao quát chức năng, RỒI mới tới validation/Negative, Boundary, Edge Case, Security, và cuối cùng UI/UX. Các case cùng một kịch bản/thành phần phải đứng liền nhau (đừng nhảy cóc qua lại). GIỮ ĐÚNG thứ tự này trong mảng "testCases".
 - Test types mong muốn: ${options.types.join(', ') || 'Functional, Negative, Edge Case'}.
 - type chỉ dùng: Positive | Negative | Boundary | Edge Case | Security | UI/UX.
@@ -431,177 +436,4 @@ Hãy sinh Test Strategy JSON theo đúng schema và quy tắc trong system promp
   },
 };
 
-export const EXAMPLES = {
-  srs: `Tính năng: Đặt Fast Track tại sân bay.
 
-User là khách hàng đã đăng nhập.
-Chọn sân bay (danh sách 10 sân bay Việt Nam), chọn ngày giờ bay, chọn số lượng người (1-10).
-Xem giá, thanh toán qua Momo hoặc thẻ Visa.
-Sau khi thanh toán thành công: nhận email và SMS xác nhận kèm mã QR.
-Có thể hủy trước 24h, hoàn 70% phí.`,
-  testcase: `Tính năng: Đăng nhập hệ thống
-
-- Người dùng nhập email và mật khẩu để đăng nhập
-- Email phải đúng định dạng
-- Mật khẩu tối thiểu 6 ký tự
-- Nếu thông tin đúng: chuyển đến Dashboard
-- Nếu sai email/password: hiện thông báo lỗi
-- Nếu sai 3 lần liên tiếp: khóa tài khoản 15 phút`,
-  apitest: `POST /api/v1/auth/login
-
-Body: { "email": "string required", "password": "string required min 6" }
-Response 200: { "success": true, "token": "JWT", "user": {...} }
-Response 400: validation error
-Response 401: wrong credentials
-Response 423: account locked`,
-  uitest: `URL: https://example.com/login
-Flow: mở trang login, nhập email/password hợp lệ, click Đăng nhập, chờ redirect /dashboard, kiểm tra tên user và nút Đăng xuất.`,
-  buganalyzer: `Bug: Session bị mất sau khi refresh trang Dashboard.
-Expected: vẫn đăng nhập sau F5.
-Actual: redirect về /login.
-Browser: Chrome. Firefox không bị.`,
-  security: `Tính năng: Upload file PDF, Word, Excel, JPG, PNG. Giới hạn 10MB/file. User đăng nhập được download, chỉ admin được xóa.`,
-  performance: `Hệ thống e-commerce, 5,000 DAU, campaign sắp tăng 3x.
-Critical endpoints: GET /api/products, POST /api/cart/add, POST /api/orders.
-SLA: P95 < 2s, error rate < 0.1%, chịu 500 concurrent users.`,
-};
-
-export const DEMO_OUTPUTS = {
-  srs: `## 1. Tổng quan
-### 1.1 Mục tiêu
-Cho phép khách hàng đã đăng nhập tự đặt dịch vụ Fast Track tại sân bay và thanh toán trực tuyến.
-### 1.2 Phạm vi
-Đặt dịch vụ, thanh toán, xác nhận, hủy/hoàn tiền. Không bao gồm quản trị vận hành phía đối tác sân bay.
-### 1.3 Actor & Role
-Khách hàng (đã đăng nhập).
-### 1.4 Giả định & Ràng buộc
-Giả định user đã đăng nhập trước khi vào luồng đặt Fast Track. Domain detected: fast-track.
-[CẦN XÁC NHẬN] Danh sách chính xác 10 sân bay chưa được cung cấp.
-
-## 2. Luồng chức năng
-### 2.1 Happy path (luồng chính)
-1. User chọn sân bay từ dropdown.
-2. User chọn ngày giờ bay và số lượng người (1-10).
-3. User xem giá và chọn phương thức thanh toán (Momo hoặc Visa).
-4. Thanh toán thành công → booking chuyển "confirmed", gửi email + SMS kèm mã QR.
-### 2.2 Luồng phụ / ngoại lệ
-- [SUY LUẬN] Mất kết nối khi thanh toán → giữ booking ở "pending", cho phép thử lại.
-- Validation ngày giờ bay không hợp lệ (quá khứ/sát giờ) → chặn submit, hiển thị lỗi.
-- [SUY LUẬN] Cổng thanh toán từ chối giao dịch → hiển thị lý do, không tạo booking "confirmed".
-### 2.3 Sơ đồ trạng thái
-pending → confirmed → checked-in → completed / cancelled (state machine mặc định domain fast-track).
-
-## 3. Yêu cầu chức năng (Functional Requirements)
-### 3.1 Đặt chuyến
-#### FR-FT-001: Chọn thông tin chuyến bay
-**Mô tả:** User chọn sân bay, ngày giờ bay, số lượng người trước khi thanh toán.
-**Acceptance Criteria:**
-- GIVEN user đã đăng nhập WHEN chọn sân bay từ dropdown THEN hiển thị danh sách sân bay hợp lệ
-- GIVEN user chọn ngày bay WHEN ngày nhỏ hơn ngày hiện tại + 2 giờ THEN chặn submit và hiển thị lỗi
-**Business Rules:**
-- BR-FT-001: Ngày bay không được nhỏ hơn ngày hiện tại + 2 giờ
-- BR-FT-002: Số lượng người từ 1 đến 10
-
-### 3.2 Thanh toán
-#### FR-FT-002: Thanh toán và xác nhận
-**Mô tả:** User thanh toán qua Momo hoặc thẻ Visa.
-**Acceptance Criteria:**
-- GIVEN booking đã tạo WHEN thanh toán thành công THEN chuyển trạng thái booking sang "confirmed" và gửi email + SMS kèm mã QR
-- GIVEN booking đã tạo WHEN thanh toán thất bại THEN giữ trạng thái "pending" và cho phép thử lại
-**Business Rules:**
-- BR-FT-003: [CẦN XÁC NHẬN] Booking "pending" quá bao lâu không thanh toán thì bị tự hủy — mốc thời gian cụ thể chưa được cung cấp
-
-## 4. Yêu cầu phi chức năng
-### 4.1 Performance
-[CẦN XÁC NHẬN] Chưa có SLA cụ thể cho thời gian phản hồi thanh toán.
-### 4.2 Security
-Không lưu thông tin thẻ thanh toán trên hệ thống, chuyển tiếp qua cổng thanh toán.
-### 4.3 Usability / UX
-[CẦN XÁC NHẬN] Không có wireframe/mockup, phần này chỉ suy luận từ mô tả text.
-### 4.4 Compatibility
-[CẦN XÁC NHẬN] Chưa có thông tin về nền tảng (web/app) và trình duyệt/OS cần hỗ trợ.
-
-## 5. Đặc tả UI/UX
-[CẦN XÁC NHẬN] Không có wireframe/mockup đính kèm, phần này chỉ suy luận từ mô tả text nên chưa có bảng element chi tiết.
-
-## 6. Đặc tả tích hợp & API
-### 6.1 External dependencies
-Cổng thanh toán Momo, cổng thanh toán Visa, dịch vụ gửi email/SMS.
-### 6.2 API contracts (tóm tắt)
-Chưa có thông tin API — cần bổ sung sau khi dev thiết kế endpoint.
-### 6.3 Data flow
-[CẦN XÁC NHẬN] Chưa rõ hệ thống nào phát hành mã QR (nội bộ hay đối tác sân bay).
-
-## 7. Glossary
-| Thuật ngữ | Định nghĩa |
-|-----------|-----------|
-| Fast Track | Dịch vụ ưu tiên làm thủ tục tại sân bay |
-| Booking | Đơn đặt dịch vụ Fast Track của user |
-
-## 8. Điểm chưa rõ — Cần xác nhận
-| # | Nội dung cần xác nhận | Ảnh hưởng đến | Người cần hỏi |
-|---|------------------------|----------------|-----------------|
-| 1 | Danh sách chính xác 10 sân bay | Dropdown chọn sân bay (FR-FT-001) | Product Owner |
-| 2 | Mốc thời gian tự hủy booking "pending" | BR-FT-003 | Product Owner |
-| 3 | Nền tảng/trình duyệt cần hỗ trợ | Section 4.4 Compatibility | Product Owner |
-
-## 9. Checklist cho QA
-- [ ] Kiểm tra boundary số lượng người (0, 1, 10, 11)
-- [ ] Kiểm tra validation ngày giờ bay quá khứ / sát giờ
-- [ ] Kiểm tra luồng hủy và hoàn tiền 70%
-- [ ] Kiểm tra booking "pending" khi thanh toán thất bại/timeout
-- [ ] Kiểm tra không có thông tin thẻ thanh toán bị lưu/log lại phía hệ thống`,
-  testcase: JSON.stringify({
-    summary: 'Demo test cases cho đăng nhập',
-    total: 3,
-    testCases: [
-      {
-        id: 'TC-001',
-        module: 'Auth',
-        name: 'Đăng nhập thành công với tài khoản hợp lệ',
-        type: 'Positive',
-        priority: 'High',
-        suite: 'Smoke',
-        automationCandidate: 'Yes',
-        traceTo: 'AC-LOGIN-01',
-        preconditions: 'Tài khoản tồn tại và chưa bị khóa',
-        steps: ['Mở trang đăng nhập', 'Nhập email hợp lệ', 'Nhập mật khẩu đúng', 'Click Đăng nhập'],
-        testData: 'test@example.com / Test@123',
-        expectedResult: 'Chuyển tới Dashboard và hiển thị tên user',
-      },
-      {
-        id: 'TC-002',
-        module: 'Auth',
-        name: 'Đăng nhập thất bại khi mật khẩu sai',
-        type: 'Negative',
-        priority: 'High',
-        suite: 'Regression',
-        automationCandidate: 'Yes',
-        traceTo: 'BR-LOGIN-ERR',
-        preconditions: 'Tài khoản tồn tại',
-        steps: ['Mở trang đăng nhập', 'Nhập email hợp lệ', 'Nhập mật khẩu sai', 'Click Đăng nhập'],
-        testData: 'WrongPass123',
-        expectedResult: 'Hiển thị lỗi và không chuyển trang',
-      },
-      {
-        id: 'TC-003',
-        module: 'Auth',
-        name: 'Khóa tài khoản sau 3 lần nhập sai',
-        type: 'Edge Case',
-        priority: 'High',
-        suite: 'Regression',
-        automationCandidate: 'Yes',
-        traceTo: 'BR-LOCK-01',
-        preconditions: 'Tài khoản chưa bị khóa',
-        steps: ['Nhập sai mật khẩu lần 1', 'Nhập sai mật khẩu lần 2', 'Nhập sai mật khẩu lần 3'],
-        testData: '3 lần nhập sai liên tiếp',
-        expectedResult: 'Tài khoản bị khóa 15 phút',
-      },
-    ],
-  }),
-  apitest: '{\n  "info": { "name": "Auth API Test Suite" },\n  "item": [\n    { "name": "Login success returns 200 and token" },\n    { "name": "Wrong password returns 401" },\n    { "name": "Missing email returns 400" }\n  ]\n}',
-  uitest: "import { test, expect } from '@playwright/test';\n\ntest('login success', async ({ page }) => {\n  await page.goto('https://example.com/login');\n  await page.fill('#email', 'test@example.com');\n  await page.fill('#password', 'Test@123');\n  await page.click('button[type=\"submit\"]');\n  await expect(page).toHaveURL(/dashboard/);\n});",
-  buganalyzer: '## Phân tích Root Cause\nToken có thể chỉ được lưu trong memory nên mất sau refresh.\n\n## Test Cases bổ sung\n- Refresh sau login\n- Hard refresh\n- So sánh Chrome và Firefox',
-  security: '## Security Test Checklist\n- [ ] Reject file .php đổi đuôi .jpg. Severity: Critical\n- [ ] User A không download file của User B. Severity: High\n- [ ] Escape filename khi render. Severity: Medium',
-  performance: '## Performance Test Plan\n\n### Scenarios\n| Scenario | Users | Duration |\n|---|---:|---|\n| Load | 500 | 30m |\n| Stress | 1500 | 15m |\n\n### KPI\nP95 < 2s, error rate < 0.1%.',
-};

@@ -13,15 +13,16 @@ import { ManualPromptModal } from './components/output/ManualPromptModal';
 import { OutputPanel } from './components/output/OutputPanel';
 import { ExportFileModal } from './components/output/ExportFileModal';
 import { ExportLarkModal } from './components/output/ExportLarkModal';
+import { ImportTestCaseModal } from './components/output/ImportTestCaseModal';
 import { ProviderSettingsModal } from './components/providers/ProviderSettingsModal';
 import { StrategyPanel } from './components/strategy/StrategyPanel';
 import { CreateProjectModal } from './components/strategy/CreateProjectModal';
-import { DEMO_OUTPUTS, EXAMPLES, SKILLS } from './features/skills/skill-registry';
+import { SKILLS } from './features/skills/skill-registry';
 import { parseClarificationQuestions } from './features/skills/srs-clarification';
 import { getVisibleSkillIds } from './utils/skill-gating';
 import { fetchStrategyApi } from './backend-api/strategy.api';
 import { toCsv, toLarkClipboardPayload, toMarkdown } from './features/testcase/testcase-export';
-import { parseAiJson, stripCodeFence } from './features/testcase/testcase-parser';
+import { parseAiJson, stripCodeFence, parsePastedTestCases } from './features/testcase/testcase-parser';
 import { QUALITY_SYSTEM_PROMPT, buildQualityPrompt, buildFinalTestCases, sortTestCases } from './features/testcase/testcase-quality';
 import { useLarkConfig } from './state/useLarkConfig';
 import { useLarkMapping } from './state/useLarkMapping';
@@ -114,10 +115,10 @@ function App() {
   const [batchGenLoading, setBatchGenLoading] = useState(false);
   const [toast, setToast] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualPrompt, setManualPrompt] = useState('');
   const [manualResponse, setManualResponse] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
   const [supplementNote, setSupplementNote] = useState('');
   const [qualityReview, setQualityReview] = useState(null);
   const [reviewDecisions, setReviewDecisions] = useState({});
@@ -292,15 +293,13 @@ function App() {
     if (!cases?.length) return;
     setLoading(true);
     try {
-      const generated = demoMode
-        ? { output: JSON.stringify({ summary: 'Demo review', reviews: [], newSuggestions: [] }), provider: 'demo' }
-        : await generateAiOutput({
-            skill: 'tcquality',
-            systemPrompt: QUALITY_SYSTEM_PROMPT,
-            userPrompt: buildQualityPrompt(cases, requirement),
-            nodeId: projectTree.activeNodeId,
-            expectJson: true,
-          });
+      const generated = await generateAiOutput({
+        skill: 'tcquality',
+        systemPrompt: QUALITY_SYSTEM_PROMPT,
+        userPrompt: buildQualityPrompt(cases, requirement),
+        nodeId: projectTree.activeNodeId,
+        expectJson: true,
+      });
       const review = parseAiJson(generated.output);
       setQualityReview(review);
       setReviewDecisions({});
@@ -373,16 +372,14 @@ function App() {
     dismissReview();
     setLoading(true);
     try {
-      const generated = demoMode
-        ? { output: DEMO_OUTPUTS[workspace.activeSkill], provider: 'demo' }
-        : await generateAiOutput({
-            skill: workspace.activeSkill,
-            systemPrompt: skill.system,
-            userPrompt: skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), { ...workspace.options, hasImage }),
-            nodeId: projectTree.activeNodeId,
-            image: hasImage ? { mediaType: workspace.image.mediaType, data: workspace.image.data } : undefined,
-            expectJson: skill.output === 'testcase',
-          });
+      const generated = await generateAiOutput({
+        skill: workspace.activeSkill,
+        systemPrompt: skill.system,
+        userPrompt: skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), { ...workspace.options, hasImage }),
+        nodeId: projectTree.activeNodeId,
+        image: hasImage ? { mediaType: workspace.image.mediaType, data: workspace.image.data } : undefined,
+        expectJson: skill.output === 'testcase',
+      });
 
       const parsed = skill.output === 'testcase' ? parseAiJson(generated.output) : stripCodeFence(generated.output);
       if (workspace.activeSkill === 'testcase' && projectTree.activeNodeId && Array.isArray(parsed.testCases)) {
@@ -421,9 +418,12 @@ function App() {
 
     setLoading(true);
     try {
-      const appendPrompt = `Dưới đây là danh sách Test Case ĐÃ CÓ (định dạng JSON) — KHÔNG lặp lại các case này trong câu trả lời:
+      // Chỉ gửi id + tên (+ module) của TC đã có để AI biết mà tránh trùng — KHÔNG
+      // gửi full steps/expected/preconditions (tiết kiệm mạnh input token).
+      const existingBrief = existingCases.map(tc => ({ id: tc.id, name: tc.name, module: tc.module })).filter(x => x.id || x.name);
+      const appendPrompt = `Danh sách Test Case ĐÃ CÓ (chỉ gồm id + tên để bạn TRÁNH trùng — KHÔNG sinh lại các case này):
 \`\`\`json
-${JSON.stringify(existingCases, null, 2)}
+${JSON.stringify(existingBrief, null, 2)}
 \`\`\`
 
 GHI CHÚ BỔ SUNG / TRẢ LỜI CÂU HỎI TỪ NGƯỜI DÙNG:
@@ -435,15 +435,13 @@ NHIỆM VỤ:
 Chỉ sinh ra các Test Case MỚI (chưa có trong danh sách trên) để bổ sung theo ghi chú trên.
 Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, không lặp lại case cũ.`;
 
-      const generated = demoMode
-        ? { output: DEMO_OUTPUTS.testcase, provider: 'demo' }
-        : await generateAiOutput({
-            skill: 'testcase',
-            systemPrompt: skill.system,
-            userPrompt: `${buildContext(projectTree.activePath)}\n\n${appendPrompt}`,
-            nodeId: projectTree.activeNodeId,
-            expectJson: true,
-          });
+      const generated = await generateAiOutput({
+        skill: 'testcase',
+        systemPrompt: skill.system,
+        userPrompt: `${buildContext(projectTree.activePath)}\n\n${appendPrompt}`,
+        nodeId: projectTree.activeNodeId,
+        expectJson: true,
+      });
       const parsedNew = parseAiJson(generated.output);
       const newCases = renumberNewCases(existingCases, parsedNew.testCases || []);
       const mergedCases = [...existingCases, ...newCases];
@@ -475,6 +473,38 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     await appendTestCases(note);
   }
 
+  // Import TC dán từ Excel/Sheets/Lark/CSV → lưu thẳng DB (0 token). MERGE thêm vào
+  // TC hiện có của node (không xóa). Server tự gán ID theo module nếu thiếu/trùng.
+  async function handleImportTestCases(text) {
+    if (!projectTree.activeNodeId) {
+      setToast('Chọn một node trước khi import');
+      return;
+    }
+    const imported = parsePastedTestCases(text);
+    if (!imported.length) {
+      setToast('Không nhận diện được test case nào trong nội dung dán');
+      return;
+    }
+    setLoading(true);
+    try {
+      const existing = workspace.output?.testCases || [];
+      const merged = [...existing, ...imported];
+      const saved = await saveTestCasesApi(projectTree.activeNodeId, merged);
+      const savedCases = Array.isArray(saved) ? saved : (saved.testCases || merged);
+      const sorted = sortTestCases(savedCases);
+      const output = { type: 'testcase', testCases: sorted, total: sorted.length };
+      workspace.setSkillOutput(output, JSON.stringify(output, null, 2), 'testcase');
+      workspace.setActiveSkill('testcase');
+      await saveSkillRun(`Import ${imported.length} TC (Manual)`, output, JSON.stringify(output, null, 2), 'manual');
+      setImportOpen(false);
+      setToast(`Đã import ${imported.length} test case (0 token)`);
+    } catch (e) {
+      setToast(`Lỗi import: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function sendSrsToTestCase() {
     const srsText = workspace.output || workspace.rawOutput;
     if (!srsText) return;
@@ -502,14 +532,12 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
       dismissReview();
       setLoading(true);
       try {
-        const generated = demoMode
-          ? { output: DEMO_OUTPUTS.srs, provider: 'demo' }
-          : await generateAiOutput({
-              skill: 'srs',
-              systemPrompt: skill.system,
-              userPrompt: skill.buildFinalizePrompt(previousSrsText, answerMarkdown, buildContext(projectTree.activePath)),
-              nodeId: projectTree.activeNodeId,
-            });
+        const generated = await generateAiOutput({
+          skill: 'srs',
+          systemPrompt: skill.system,
+          userPrompt: skill.buildFinalizePrompt(previousSrsText, answerMarkdown, buildContext(projectTree.activePath)),
+          nodeId: projectTree.activeNodeId,
+        });
 
         const parsed = stripCodeFence(generated.output);
         workspace.setSkillOutput(parsed, generated.output);
@@ -548,15 +576,13 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
       const systemPrompt = SKILLS.srsdecomposer.system;
       const userPrompt = SKILLS.srsdecomposer.buildPrompt(srsContent, buildContext(projectTree.activePath));
 
-      const generated = demoMode
-        ? { output: JSON.stringify([{ name: 'Quản lý sản phẩm con', srsSegment: '## Đặc tả con' }]), provider: 'demo' }
-        : await generateAiOutput({
-            skill: 'srsdecomposer',
-            systemPrompt,
-            userPrompt,
-            nodeId: projectTree.activeNodeId,
-            expectJson: true,
-          });
+      const generated = await generateAiOutput({
+        skill: 'srsdecomposer',
+        systemPrompt,
+        userPrompt,
+        nodeId: projectTree.activeNodeId,
+        expectJson: true,
+      });
 
       const features = parseAiJson(generated.output);
       if (!Array.isArray(features)) {
@@ -606,36 +632,14 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
     }
   }
 
-  // Sinh draft Test Strategy bằng AI (F6) — gọi từ StrategyModal. Trả về object
-  // đã parse { summary, stages, executionPlan, releaseGate } để modal review + toggle.
-  const DEMO_STRATEGY = {
-    summary: '(Demo) Chiến lược test cho việc thêm tính năng vào product đã có.',
-    stages: [
-      { key: 'api', activity: 'API Testing', stageType: 'integration', enabled: true, trigger: 'Ngay khi dev xong backend', skills: ['apitest'], entryCriteria: 'Endpoint deploy lên môi trường test', exitCriteria: '100% API TC pass, 0 bug P1' },
-      { key: 'smoke', activity: 'Smoke Test', stageType: 'integration', enabled: true, trigger: 'Khi có build mới', skills: ['testcase'], entryCriteria: 'Build deploy thành công', exitCriteria: 'Toàn bộ smoke TC pass' },
-      { key: 'manual', activity: 'Manual / Functional', stageType: 'new_feature', enabled: true, trigger: 'Sau khi smoke pass', skills: ['testcase', 'uitest'], entryCriteria: 'Smoke đã pass', exitCriteria: 'Full TC pass, bug P1/P2 đã fix' },
-      { key: 'regression', activity: 'Regression', stageType: 'regression', enabled: true, trigger: 'Trước khi release', skills: ['testcase'], entryCriteria: 'Manual đã xong', exitCriteria: 'Bộ regression pass 100%' },
-      { key: 'performance', activity: 'Performance', stageType: 'pre_release', enabled: false, trigger: 'Trên staging trước release', skills: ['performance'], entryCriteria: '', exitCriteria: '' },
-      { key: 'security', activity: 'Security', stageType: 'pre_release', enabled: false, trigger: 'Trên staging trước release', skills: ['security'], entryCriteria: '', exitCriteria: '' },
-    ],
-    executionPlan: {
-      sprintMap: [{ stage: 'api', when: 'Sprint 1' }, { stage: 'manual', when: 'Sprint 2' }],
-      ownerMap: [{ stage: 'api', owner: 'QA API / Dev' }, { stage: 'manual', owner: 'QA Manual' }],
-      priorityOrder: ['api', 'smoke', 'manual', 'regression'],
-    },
-    releaseGate: '(Demo) Release khi API + Smoke + Manual + Regression đều đạt exit criteria, 0 bug P1 open.',
-  };
-
   async function handleGenerateStrategyDraft(template, note) {
-    const generated = demoMode
-      ? { output: JSON.stringify(DEMO_STRATEGY), provider: 'demo' }
-      : await generateAiOutput({
-          skill: 'teststrategy',
-          systemPrompt: SKILLS.teststrategy.system,
-          userPrompt: SKILLS.teststrategy.buildPrompt(note, buildContext(projectTree.activePath), { template }),
-          nodeId: projectTree.activeNodeId,
-          expectJson: true,
-        });
+    const generated = await generateAiOutput({
+      skill: 'teststrategy',
+      systemPrompt: SKILLS.teststrategy.system,
+      userPrompt: SKILLS.teststrategy.buildPrompt(note, buildContext(projectTree.activePath), { template }),
+      nodeId: projectTree.activeNodeId,
+      expectJson: true,
+    });
     const parsed = parseAiJson(generated.output);
     return { ...parsed, provider: generated.provider };
   }
@@ -667,15 +671,13 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
 
       const srsContent = latestSrs.output || latestSrs.rawOutput;
 
-      const generated = demoMode
-        ? { output: DEMO_OUTPUTS.testcase, provider: 'demo' }
-        : await generateAiOutput({
-            skill: 'testcase',
-            systemPrompt: SKILLS.testcase.system,
-            userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
-            nodeId: feature.id,
-            expectJson: true,
-          });
+      const generated = await generateAiOutput({
+        skill: 'testcase',
+        systemPrompt: SKILLS.testcase.system,
+        userPrompt: SKILLS.testcase.buildPrompt(srsContent, `Feature context: ${feature.name}`, { types: ['Positive', 'Negative', 'Boundary', 'Edge Case'] }),
+        nodeId: feature.id,
+        expectJson: true,
+      });
 
       const parsed = parseAiJson(generated.output);
 
@@ -987,8 +989,6 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           onCreateProject={(systemId, systemName) => setCreateProject({ systemId, systemName })}
           onExportFile={handleExportScopeFile}
           onExportLark={handleExportScopeLark}
-          demoMode={demoMode}
-          setDemoMode={setDemoMode}
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
@@ -1036,7 +1036,6 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               projectNode={projectTree.activeNode}
               onGenerateDraft={handleGenerateStrategyDraft}
               onToast={setToast}
-              demoMode={demoMode}
               onPlanChanged={projectTree.refreshTree}
             />
           )}
@@ -1110,7 +1109,6 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
                     Copy Manual Prompt
                   </Button>
                 )}
-                <Button variant="outline" size="sm" className="h-7 text-xs border-zinc-800 hover:bg-zinc-800 hover:text-white" onClick={() => workspace.setSkillInput(EXAMPLES[workspace.activeSkill] || '')}>Sample</Button>
               </div>
             </div>
             <SkillOptions activeSkill={workspace.activeSkill} options={workspace.options} setOptions={workspace.setOptions} />
@@ -1156,6 +1154,11 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               </div>
             )}
             <div className="flex items-center justify-end gap-2 mt-3">
+              {workspace.activeSkill === 'testcase' && projectTree.activeNodeId && (
+                <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} disabled={loading || batchGenLoading} title="Dán bảng TC từ Excel/Sheets/Lark → lưu thẳng, không tốn token">
+                  Import TC (0 token)
+                </Button>
+              )}
               {FEATURE_PARENT_TYPES.includes(projectTree.activeNode?.type) && (
                 <Button variant="outline" size="sm" onClick={handleGenAllTC} disabled={batchGenLoading || loading}>
                   {batchGenLoading ? 'Đang gen hàng loạt...' : 'Gen All TC'}
@@ -1375,6 +1378,13 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
           setResponse={setManualResponse}
           onClose={() => setManualOpen(false)}
           onProcess={processManualResponse}
+        />
+      )}
+      {importOpen && (
+        <ImportTestCaseModal
+          onClose={() => setImportOpen(false)}
+          onImport={handleImportTestCases}
+          busy={loading}
         />
       )}
       {larkLinkOpen && (

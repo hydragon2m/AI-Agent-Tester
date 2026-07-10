@@ -14,7 +14,7 @@ import hydraLogo from '../../hydra-logo.png';
 export function ProjectSidebar({
   nodes, activeNodeId, onSelect, onAdd, onRename, onDelete,
   onExport, onImport, onCreateProject, onExportFile, onExportLark,
-  demoMode, setDemoMode, onOpenSettings,
+  onOpenSettings,
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const { width, resizing, startResize } = useResizableWidth({ storageKey: 'sidebar-width-project', defaultWidth: 220, min: 180, max: 460 });
@@ -151,23 +151,15 @@ export function ProjectSidebar({
                     <span className="text-[9px] text-slate-400 font-mono">Hanhdth</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Button
-                    variant={demoMode ? 'default' : 'secondary'}
-                    size="sm"
-                    className="h-7 text-[10px] flex-1 py-0 px-2 font-semibold"
-                    onClick={() => setDemoMode(v => !v)}
-                  >
-                    Demo Mode
-                  </Button>
+                <div className="flex items-center gap-1.5 mt-0.5 w-full">
                   <Button
                     variant="outline"
-                    size="icon"
-                    className="h-7 w-7 border-zinc-800 hover:bg-zinc-800 hover:text-white shrink-0"
+                    size="sm"
+                    className="h-7 text-[11px] border-zinc-800 hover:bg-zinc-800 hover:text-white w-full"
                     onClick={onOpenSettings}
-                    title="Cấu hình nhà cung cấp AI"
                   >
-                    <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                    <Settings className="w-3.5 h-3.5 mr-1.5 text-zinc-400 inline-block" />
+                    <span>Cấu hình AI</span>
                   </Button>
                 </div>
               </div>

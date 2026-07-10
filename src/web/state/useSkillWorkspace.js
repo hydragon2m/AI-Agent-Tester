@@ -13,6 +13,7 @@ export function useSkillWorkspace() {
     language: 'typescript',
     domain: '',
     detailLevel: 'full',
+    coverage: 'balanced', // mức độ phủ khi gen TC: fast (~10) | balanced (~20, mặc định) | full (không giới hạn, tốn token)
     autoAudit: false, // mặc định KHÔNG tự đánh giá chất lượng TC (tiết kiệm token) — user tự bấm/tick
   });
 

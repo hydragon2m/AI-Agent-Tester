@@ -20,7 +20,7 @@ import {
 
 // Panel Test Strategy hiển thị INLINE trong workspace khi node đang chọn là project.
 // Thay thế hoàn toàn phần skill (Requirement/Output) — project node chỉ có màn này.
-export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode, onPlanChanged }) {
+export function StrategyPanel({ projectNode, onGenerateDraft, onToast, onPlanChanged }) {
   const [tab, setTab] = useState('plan'); // 'plan' | 'release'
   const [view, setView] = useState('loading'); // 'loading' | 'generate' | 'review' | 'current'
   const [existing, setExisting] = useState(null); // strategy hiện có
@@ -161,7 +161,6 @@ export function StrategyPanel({ projectNode, onGenerateDraft, onToast, demoMode,
               onGenerateCode={handleGenerateCode}
               hasExisting={!!existing}
               onBack={existing ? () => setView('current') : null}
-              demoMode={demoMode}
             />
           )}
 
@@ -214,12 +213,11 @@ function TabBar({ tab, setTab }) {
   );
 }
 
-function GenerateView({ template, setTemplate, note, setNote, generating, onGenerate, onGenerateCode, hasExisting, onBack, demoMode }) {
+function GenerateView({ template, setTemplate, note, setNote, generating, onGenerate, onGenerateCode, hasExisting, onBack }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-400 leading-normal">
         Chọn loại project → <strong>Sinh bằng Code</strong> (nhanh, 0 token) để lấy cấu hình chuẩn, hoặc <strong>Sinh bằng AI</strong> để AI phân tích ngữ cảnh dự án.
-        {demoMode ? ' (Đang ở Demo mode — kết quả AI là mẫu.)' : ''}
       </p>
       <div className="pf-field flex flex-col gap-1.5">
         <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">Loại project (template)</label>
