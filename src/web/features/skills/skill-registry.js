@@ -19,8 +19,8 @@ QUY TẮC BẮT BUỘC:
    > - *Câu hỏi 1*: [Mô tả chi tiết câu hỏi, ví dụ: Bạn muốn có những Trạng thái sản phẩm cụ thể nào? Gợi ý: Hoạt động, Ngừng hoạt động, Bản nháp...]
    > - *Câu hỏi 2*: [Ví dụ: Thao tác hàng loạt gồm những hành động gì? Gợi ý: Xóa hàng loạt, Cập nhật trạng thái hàng loạt...]
    KHÔNG được tự ý suy đoán các giá trị cụ thể này nếu đề bài không cho. Đồng thời, vẫn ghi nhận các dòng tương ứng vào bảng ở phần "8. Điểm chưa rõ — Cần xác nhận" ở cuối tài liệu.
-   QUAN TRỌNG — bạn chỉ được hỏi 1 vòng duy nhất để thu thập tất cả thông tin còn thiếu.
-   SAU KHI USER ĐÃ TRẢ LỜI (vòng chốt): Bạn BẮT BUỘC phải viết bản SRS hoàn chỉnh và TUYỆT ĐỐI không được hỏi thêm bất kỳ câu hỏi nào (không chèn hộp [CÂU HỎI LÀM RÕ] nữa). Kết hợp các câu trả lời mới để hoàn thành SRS. Với mọi chi tiết còn khuyết hoặc chưa rõ, hãy tự đưa ra giả định hợp lý, gắn tag "[GIẢ ĐỊNH]" và liệt kê ở mục 8. KHÔNG được hỏi đi hỏi lại.
+   QUAN TRỌNG — MỖI VÒNG hỏi phải gộp HẾT các câu hỏi còn thiếu trong 1 lượt (KHÔNG hỏi nhỏ giọt từng câu, rất mất thời gian của user). Được hỏi qua NHIỀU VÒNG nếu cần, nhưng mỗi vòng chỉ mở khi thật sự còn điểm business-critical mơ hồ.
+   SAU KHI USER ĐÃ TRẢ LỜI: nếu VẪN còn điểm business-critical chưa rõ (trạng thái/state, validation, phân quyền, ràng buộc nghiệp vụ, con số/giới hạn) mà nếu đoán sai sẽ làm sai test case → ĐƯỢC PHÉP hỏi thêm 1 vòng nữa (gộp HẾT câu hỏi mới trong 1 lượt, TUYỆT ĐỐI không lặp lại câu đã được trả lời). Nếu đã hết khúc mắc business-critical → BẮT BUỘC viết bản SRS hoàn chỉnh, không hỏi thêm. Tag "[GIẢ ĐỊNH]" CHỈ dùng cho chi tiết cosmetic/không ảnh hưởng viết TC (liệt kê ở mục 8) — TUYỆT ĐỐI không dùng [GIẢ ĐỊNH] để né hỏi điểm business-critical.
 3. KHÔNG dùng ngôn ngữ mơ hồ như "hệ thống sẽ xử lý phù hợp", "thực hiện đúng cách" — phải có con số, trạng thái, điều kiện cụ thể.
 4. Nếu input là ảnh wireframe/mockup: mô tả CHI TIẾT từng element nhìn thấy — không bỏ sót field, nút, label, badge, icon, tooltip nào. Nếu input CHỈ có ảnh (không có text), phải đọc kỹ ảnh để tự suy luận toàn bộ luồng và yêu cầu.
 5. Mọi Acceptance Criteria viết theo format: "GIVEN <điều kiện ban đầu> WHEN <hành động> THEN <kết quả mong đợi>".
@@ -137,10 +137,10 @@ ${previousSrs}
 ${answersMarkdown}
 
 NHIỆM VỤ:
-Người dùng đã trả lời các câu hỏi làm rõ. Bạn BẮT BUỘC phải viết lại bản SRS HOÀN CHỈNH đầy đủ.
-- TUYỆT ĐỐI KHÔNG chèn hộp "[CÂU HỎI LÀM RÕ]" nữa, không được hỏi thêm bất kỳ câu hỏi nào.
-- Hãy kết hợp các câu trả lời của người dùng để hoàn thiện tài liệu SRS theo đúng cấu trúc 9 section đã quy định trong system prompt.
-- Với những chi tiết còn thiếu hoặc chưa rõ, tự đưa ra giả định hợp lý, gắn tag "[GIẢ ĐỊNH]" và liệt kê ở mục 8.
+Người dùng đã trả lời các câu hỏi làm rõ. Hãy tiếp thu các câu trả lời để hoàn thiện SRS.
+- Nếu SAU KHI đã tiếp thu câu trả lời mà VẪN còn điểm business-critical chưa rõ (trạng thái/state, validation, phân quyền, ràng buộc nghiệp vụ, con số/giới hạn) — điểm mà nếu đoán sai sẽ làm sai test case → ĐƯỢC PHÉP chèn lại hộp "[CÂU HỎI LÀM RÕ]" ở ĐẦU tài liệu với các câu hỏi MỚI (gộp hết trong 1 lượt, TUYỆT ĐỐI không lặp câu đã được trả lời) và CHƯA viết SRS đầy đủ ở vòng này.
+- Nếu đã hết khúc mắc business-critical → BẮT BUỘC viết lại bản SRS HOÀN CHỈNH đầy đủ theo đúng cấu trúc 9 section, KHÔNG chèn hộp câu hỏi nữa.
+- Tag "[GIẢ ĐỊNH]" CHỈ dùng cho chi tiết cosmetic/không ảnh hưởng viết TC (liệt kê ở mục 8), KHÔNG dùng để né hỏi điểm business-critical.
 Ngôn ngữ: Tiếng Việt (thuật ngữ kỹ thuật giữ nguyên tiếng Anh).`;
     },
   },
@@ -173,7 +173,8 @@ Chỉ trả về duy nhất 1 block JSON hợp lệ có schema:
       "expectedResult": "Expected outcome"
     }
   ]
-}`,
+}
+QUY TẮC openQuestions: mỗi phần tử là 1 chuỗi. NẾU câu hỏi có tập phương án khả dĩ hữu hạn (ví dụ giá trị mặc định, số lượng, có/không, danh sách trạng thái/thao tác) → BẮT BUỘC gợi ý các phương án ở CUỐI câu theo đúng định dạng "Câu hỏi? Gợi ý: A / B / C" (ngăn cách bằng dấu "/") để người dùng chọn nhanh thay vì gõ tay. Chỉ để câu hỏi mở (không kèm "Gợi ý:") khi thực sự không thể liệt kê phương án.`,
     buildPrompt(input, context, options) {
       return `${context}
 

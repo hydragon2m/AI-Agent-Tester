@@ -250,6 +250,47 @@ async function reconcileFields(appToken, tableId, token, bugTableId) {
   return { added, upgraded, renamed };
 }
 
+// Module là single-select nhưng danh sách module đổi theo từng project (khác với
+// Type/Priority/Status cố định) → gộp ĐỘNG các tên module thực tế đang đẩy vào
+// options của field Module. Chỉ THÊM option mới, không bao giờ xoá; giữ thứ tự
+// (options cũ trước, module mới nối lần lượt sau). Nếu field đang là text (type 1,
+// bảng cũ) sẽ được nâng lên single-select — Lark giữ nguyên text cell sẵn có.
+async function ensureModuleOptions(appToken, tableId, token, moduleNames) {
+  const names = [...new Set((moduleNames || []).map(n => normalize(n)).filter(Boolean))];
+  if (!names.length) return;
+  const fieldsRes = await larkFetch(`/bitable/v1/apps/${appToken}/tables/${tableId}/fields`, { token });
+  const moduleField = (fieldsRes.items || []).find(f => f.field_name === 'Module');
+  if (!moduleField) return;
+  const currentOptions = moduleField.property?.options || [];
+  const currentNames = new Set(currentOptions.map(o => o.name));
+  const missing = names.filter(n => !currentNames.has(n));
+  if (moduleField.type === 3 && missing.length === 0) return;
+  await larkFetch(`/bitable/v1/apps/${appToken}/tables/${tableId}/fields/${moduleField.field_id}`, {
+    method: 'PUT',
+    token,
+    body: {
+      field_name: 'Module',
+      type: 3,
+      property: { options: [...currentOptions, ...missing.map(name => ({ name }))] }
+    }
+  });
+}
+
+// Đổi tên bảng test case của project thành tên project (thống nhất mọi đường đẩy:
+// per-node & "Lark cả nhánh" đều dùng project làm tên bảng). Rename KHÔNG mất dữ
+// liệu. Nếu tên trùng bảng khác / không đổi được → nuốt lỗi, giữ nguyên bảng cũ.
+async function ensureTableName(appToken, tableId, token, desiredName) {
+  const name = sanitizeTableName(desiredName);
+  if (!name) return;
+  try {
+    await larkFetch(`/bitable/v1/apps/${appToken}/tables/${tableId}`, {
+      method: 'PATCH',
+      token,
+      body: { name }
+    });
+  } catch (e) { /* tên trùng / không đổi được → giữ nguyên bảng hiện có */ }
+}
+
 async function linkProject(nodeId, url) {
   const config = await requireConfig();
   const node = await getNodeById(nodeId);
@@ -359,18 +400,26 @@ async function pushTestCases(nodeId) {
   }
 
   const token = await getTenantAccessToken(config);
-  const nodePath = await getNodePath(nodeId);
 
-  const testCases = await getTestCases(nodeId);
+  // Đẩy từ BẤT KỲ node (project/module/screen/feature): gom TOÀN BỘ TC thuộc nhánh
+  // node đó, mỗi TC mang _path (module/screen/feature) RIÊNG → dữ liệu về đúng ô.
+  // Feature là trường hợp đặc biệt (nhánh = chính nó) nên hành vi cũ được giữ nguyên.
+  const { groups } = await getTestCasesForScope(node.type, nodeId);
+  const testCases = groups.flatMap(g => g.rows);
   const summary = { created: 0, updated: 0, bugsLinked: 0, errors: [] };
   if (testCases.length === 0) return summary;
+
+  // Đặt tên bảng = tên project + nạp động options cho field Module (single-select) trước khi ghi record.
+  const projectName = groups[0]?.projectName;
+  if (projectName) await ensureTableName(link.appToken, link.testcaseTableId, token, projectName);
+  await ensureModuleOptions(link.appToken, link.testcaseTableId, token, testCases.map(tc => tc._path?.module || tc.module));
 
   const toCreate = [];
   const toUpdate = [];
 
   for (const tc of testCases) {
     try {
-      const fields = buildRecordFields(tc, nodePath);
+      const fields = buildRecordFields(tc, tc._path || {});
       if (tc.related_bug && tc.related_bug.trim()) {
         const bugRecordId = await findOrCreateBugRecord(link, token, tc.related_bug);
         if (bugRecordId) {
@@ -436,7 +485,7 @@ function sanitizeTableName(name) {
 // create/update+dedup logic of pushTestCases but works off explicit rows +
 // per-row path so it can serve a whole scope. `link` = { appToken,
 // testcaseTableId, bugTableId }.
-async function syncRowsToTable(link, token, rows) {
+async function syncRowsToTable(link, token, rows, tableCreated = false) {
   const summary = { created: 0, updated: 0, bugsLinked: 0, errors: [] };
   const toCreate = [];
   const toUpdate = [];
@@ -452,7 +501,9 @@ async function syncRowsToTable(link, token, rows) {
         }
       }
       const entry = { tc, fields };
-      if (tc.lark_record_id) toUpdate.push(entry);
+      // Bảng vừa được tạo mới → chưa có record nào; lark_record_id (nếu có) là của
+      // bảng KHÁC lần đẩy trước → phải tạo mới, KHÔNG được update (tránh "record not found").
+      if (tc.lark_record_id && !tableCreated) toUpdate.push(entry);
       else toCreate.push(entry);
     } catch (e) {
       summary.errors.push(`${tc.external_id || tc.id}: ${e.message}`);
@@ -491,7 +542,28 @@ async function syncRowsToTable(link, token, rows) {
         summary.updated++;
       }
     } catch (e) {
-      summary.errors.push(`batch_update: ${e.message}`);
+      // record_id cũ trỏ tới bảng khác / đã bị xoá trên Lark → tạo mới thay vì update.
+      if (/not found/i.test(e.message)) {
+        try {
+          const res = await larkFetch(`/bitable/v1/apps/${link.appToken}/tables/${link.testcaseTableId}/records/batch_create`, {
+            method: 'POST',
+            token,
+            body: { records: batch.map(en => ({ fields: en.fields })) }
+          });
+          const created = res.records || [];
+          for (let i = 0; i < batch.length; i++) {
+            const recordId = created[i]?.record_id;
+            if (recordId) {
+              await markLarkSynced(batch[i].tc.id, recordId);
+              summary.created++;
+            }
+          }
+        } catch (e2) {
+          summary.errors.push(`batch_update→create: ${e2.message}`);
+        }
+      } else {
+        summary.errors.push(`batch_update: ${e.message}`);
+      }
     }
   }
 
@@ -532,8 +604,9 @@ async function pushTestCasesScope(scopeType, scopeId, larkUrl, saveLink) {
     try {
       const tcTable = await ensureTestCaseTable(appToken, token, null, bugTable.tableId, name);
       await reconcileFields(appToken, tcTable.tableId, token, bugTable.tableId);
+      await ensureModuleOptions(appToken, tcTable.tableId, token, group.rows.map(tc => tc._path?.module || tc.module));
       const link = { appToken, testcaseTableId: tcTable.tableId, bugTableId: bugTable.tableId };
-      const summary = await syncRowsToTable(link, token, group.rows);
+      const summary = await syncRowsToTable(link, token, group.rows, tcTable.created);
 
       result.tables.push({
         projectName: group.projectName,

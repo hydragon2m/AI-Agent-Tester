@@ -404,9 +404,12 @@ function App() {
     }
   }
 
-  async function appendTestCases() {
+  async function appendTestCases(noteOverride) {
     if (workspace.activeSkill !== 'testcase') return;
-    if (!supplementNote.trim()) {
+    // onClick truyền event vào arg đầu → chỉ coi là note khi là string (gọi từ form trả lời câu hỏi).
+    const usingOverride = typeof noteOverride === 'string';
+    const note = (usingOverride ? noteOverride : supplementNote).trim();
+    if (!note) {
       setToast('Nhập nội dung cần bổ sung (case còn thiếu / trả lời câu hỏi)');
       return;
     }
@@ -425,7 +428,7 @@ ${JSON.stringify(existingCases, null, 2)}
 
 GHI CHÚ BỔ SUNG / TRẢ LỜI CÂU HỎI TỪ NGƯỜI DÙNG:
 ---
-${supplementNote}
+${note}
 ---
 
 NHIỆM VỤ:
@@ -444,8 +447,9 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
       const parsedNew = parseAiJson(generated.output);
       const newCases = renumberNewCases(existingCases, parsedNew.testCases || []);
       const mergedCases = [...existingCases, ...newCases];
-      const mergedOutput = { ...workspace.output, testCases: mergedCases, total: mergedCases.length };
-      const nextRequirement = [workspace.input.trim(), `[Bổ sung] ${supplementNote.trim()}`].filter(Boolean).join('\n\n');
+      // Cập nhật lại openQuestions theo phản hồi mới nhất → xóa các câu hỏi vừa được trả lời khỏi ô cảnh báo.
+      const mergedOutput = { ...workspace.output, testCases: mergedCases, total: mergedCases.length, openQuestions: parsedNew.openQuestions || [] };
+      const nextRequirement = [workspace.input.trim(), `[Bổ sung] ${note}`].filter(Boolean).join('\n\n');
 
       workspace.setSkillInput(nextRequirement);
       workspace.setSkillOutput(mergedOutput, JSON.stringify(mergedOutput, null, 2));
@@ -453,13 +457,22 @@ Trường "testCases" trong JSON trả về CHỈ chứa các test case mới, k
         await saveTestCasesApi(projectTree.activeNodeId, mergedCases);
       }
       await saveSkillRun(nextRequirement, mergedOutput, JSON.stringify(mergedOutput, null, 2), generated.provider);
-      setSupplementNote('');
+      if (!usingOverride) setSupplementNote('');
       setToast(`Đã bổ sung ${newCases.length} test case mới`);
     } catch (e) {
       setToast(`Lỗi: ${e.message}`);
     } finally {
       setLoading(false);
     }
+  }
+
+  // Trả lời batch các câu hỏi "openQuestions" mà skill TC nêu ra: gộp Q&A thành 1
+  // ghi chú rồi đưa qua đúng flow bổ sung (appendTestCases) — không cần gõ tay từng câu.
+  async function handleTcClarificationSubmit(pairs) {
+    if (!Array.isArray(pairs) || !pairs.length) return;
+    const note = 'TRẢ LỜI CÁC CÂU HỎI CẦN LÀM RÕ:\n' +
+      pairs.map(p => `- ${p.q}\n  → ${p.a}`).join('\n');
+    await appendTestCases(note);
   }
 
   function sendSrsToTestCase() {
@@ -1298,6 +1311,7 @@ ${skill.buildPrompt(workspace.input, buildContext(projectTree.activePath), works
               onSubmitClarifications={handleClarificationSubmit}
               loading={loading}
               onUpdateTestCases={handleUpdateTestCases}
+              onSubmitTcQuestions={handleTcClarificationSubmit}
               nodePath={nodePathInfo}
             />
           </section>

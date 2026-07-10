@@ -5,7 +5,35 @@
 
 ---
 
-## Session hiện tại: 2026-07-10 — Sửa lỗi không gen được SRS do Gemini 503 (High Demand)
+## Session hiện tại: 2026-07-10 — Câu hỏi làm rõ: cho SRS hỏi nhiều vòng + Form batch trả lời ở bước TC
+
+### 1. Task đã hoàn thành
+User phản ánh: (a) câu hỏi làm rõ không được hỏi hết ở bước SRS, rò rỉ xuống bước gen TC; (b) ở bước TC câu hỏi hiện read-only, phải gõ tay từng câu vào ô "Bổ sung thêm" → mất thời gian. User chốt làm CẢ 2 hướng.
+- **(A) Cho SRS hỏi NHIỀU VÒNG (gỡ giới hạn 1 vòng của phiên trước cùng ngày)**: Sửa prompt trong `skill-registry.js` — quy tắc #2 (system prompt SRS) + `buildFinalizePrompt`. Giờ: mỗi vòng vẫn phải gộp HẾT câu hỏi trong 1 lượt (không nhỏ giọt), NHƯNG sau khi user trả lời mà vẫn còn điểm **business-critical** mơ hồ (state/validation/phân quyền/ràng buộc/số liệu) → AI được hỏi tiếp vòng nữa (không lặp câu cũ); `[GIẢ ĐỊNH]` CHỈ dùng cho cosmetic, không dùng để né hỏi. Frontend đã hỗ trợ sẵn nhiều vòng (`handleClarificationSubmit` check `stillHasQuestions`, OutputPanel re-parse mỗi render) → KHÔNG phải sửa thêm frontend.
+- **(B) Form batch trả lời câu hỏi ở bước TC**: `openQuestions` của skill testcase (trước chỉ là danh sách read-only) giờ render thành **form có ô nhập cho từng câu + 1 nút submit** (`TcClarificationForm` trong `OutputPanel.jsx`). Submit → gộp Q&A thành ghi chú → đưa qua đúng flow `appendTestCases` (bổ sung TC, không gõ tay). `appendTestCases(noteOverride?)` giờ nhận note tùy chọn (guard `typeof === 'string'` vì onClick truyền event); ô "Bổ sung thêm" chỉ clear khi dùng chính nó. Merge cũng cập nhật lại `openQuestions` theo phản hồi mới → xóa câu vừa trả lời. Khi đang ở chế độ review chất lượng thì vẫn hiển thị read-only (không hiện form). **Cập nhật sau**: câu hỏi có phương án gợi ý (AI xuất dạng "Câu hỏi? Gợi ý: A / B / C" — đã thêm quy tắc vào system prompt testcase) → form render **chip bấm chọn** (chọn nhiều được) + ô "Khác" tùy chọn qua `parseTcQuestion`; câu mở mới dùng textarea. User không phải gõ tay câu hỏi + câu trả lời nữa.
+
+- **(C) Sửa lỗi "record not found" khi "Lark cả nhánh" tạo bảng mới**: `lark_record_id` lưu toàn cục trên mỗi TC (trỏ tới bảng đẩy lần trước). Khi scope push tạo BẢNG MỚI, TC có `lark_record_id` cũ bị xếp nhầm vào `batch_update` → update record không tồn tại trên bảng mới → lỗi `record not found` (Lark batch_update all-or-nothing → cả batch fail, `cập nhật 0`). Fix trong `syncRowsToTable` (`lark.service.js` — helper riêng của scope, KHÔNG đụng `pushTestCases`): (1) thêm tham số `tableCreated` — nếu bảng vừa tạo mới → ép TẤT CẢ rows vào `toCreate` (bỏ qua lark_record_id cũ); (2) fallback: nếu `batch_update` lỗi `not found` → tự `batch_create` lại batch đó + `markLarkSynced` record_id mới (cứu cả case bảng cũ nhưng record_id trỏ bảng khác). Call site truyền `tcTable.created`.
+- **(D) CSS panel review TC**: nhóm 4 nút "Áp dụng tất cả · Giữ nguyên · Bỏ qua · Áp dụng" (`TestCaseReviewPanel.jsx`) bị xuống nhiều dòng do container `flex-wrap` bị co (thiếu `shrink-0`) trong flex row. Đổi `flex-wrap` → `flex-nowrap shrink-0` + `whitespace-nowrap` mỗi nút → 4 nút cùng 1 hàng ngang.
+- **(E) Push Lark từ MỌI cấp node + Module single-select + tên bảng = project** (yêu cầu user; giữ nguyên flow feature): (1) `pushTestCases(nodeId)` trước chỉ lấy TC gắn TRỰC TIẾP node (`getTestCases`, không đệ quy) + áp 1 `nodePath` chung → sai path khi đẩy từ project/module/screen. Giờ gom TOÀN BỘ TC trong nhánh qua `getTestCasesForScope(node.type, nodeId)`, mỗi TC dùng `_path` RIÊNG (`buildRecordFields(tc, tc._path||{})`) → dữ liệu về đúng module/screen/feature. (2) Thêm `ensureModuleOptions()` — nạp ĐỘNG tên module thật vào options field Module (type 3 single-select, trước để `options:[]` rỗng và reconcileFields không đụng Module); chỉ thêm không xóa, nâng cấp Module text(cũ)→single-select. Gọi ở cả `pushTestCases` lẫn `pushTestCasesScope`. (3) Thêm `ensureTableName()` (PATCH `/bitable/v1/apps/{app}/tables/{tableId}` body `{name}`) — đổi tên bảng đã link thành tên project (nuốt lỗi nếu trùng tên). Verify read-only: đẩy từ project "INVENTORY" gom đúng 60 TC, mỗi TC có `_path`, module distinct="Products". **CẦN RESTART BACKEND + push thật để verify e2e Lark.**
+
+### 2. File đã sửa (phiên này)
+- `src/web/features/skills/skill-registry.js` — prompt SRS #2 + `buildFinalizePrompt` (cho phép nhiều vòng).
+- `src/web/main.jsx` — `appendTestCases(noteOverride)` + `handleTcClarificationSubmit(pairs)` + truyền `onSubmitTcQuestions` xuống OutputPanel.
+- `src/web/components/output/OutputPanel.jsx` — thêm `TcClarificationForm`; `TestCaseOutput`/`OutputPanel` nhận `onSubmitTcQuestions`+`loading`; render form thay danh sách read-only khi có `onSubmitTcQuestions && !review`.
+- `src/server/services/lark.service.js` — `syncRowsToTable(link, token, rows, tableCreated)` + fallback update→create; `pushTestCases` gom theo nhánh + `_path` riêng; thêm `ensureModuleOptions`, `ensureTableName`; gọi trong cả `pushTestCases` và `pushTestCasesScope`. **CẦN RESTART BACKEND để có hiệu lực.**
+- `src/web/components/output/TestCaseReviewPanel.jsx` — nút review 1 hàng ngang.
+
+### 3. Test đã chạy (phiên này)
+- `npm run build` (Vite) — PASS (1836 modules, không lỗi). `node --check lark.service.js` — PASS. CHƯA click-test UI thật; CHƯA e2e Lark push (cần restart backend + creds).
+
+### 4. Điều KHÔNG được làm ở session sau (phiên này)
+- KHÔNG khôi phục lại giới hạn "chỉ 1 vòng hỏi SRS" (user đã yêu cầu nhiều vòng) — nhưng giữ nguyên "mỗi vòng gộp hết câu hỏi trong 1 lượt".
+- KHÔNG bỏ guard `typeof noteOverride === 'string'` trong `appendTestCases` (onClick nút "Bổ sung thêm" truyền event vào arg đầu → bỏ guard sẽ dùng nhầm event làm note).
+- KHÔNG đụng `pushTestCases`/`buildRecordFields`/`reconcileFields` khi sửa scope push — chỉ sửa `syncRowsToTable`. (Lưu ý: `pushTestCases` cũng có lỗi tương tự tiềm ẩn nếu record bị xoá trên Lark, nhưng chưa sửa theo điều cấm phiên trước.)
+
+---
+
+## Session trước: 2026-07-10 — Sửa lỗi không gen được SRS do Gemini 503 (High Demand)
 
 ### 1. Task đã hoàn thành
 - **Sửa lỗi không nhận phản hồi khi gen SRS**:

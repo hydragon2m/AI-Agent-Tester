@@ -289,6 +289,11 @@ if (lastSrsRun) {
 - Đổi key `testCases` thành tên khác
 - Bỏ fields: id, name, steps, expectedResult (required cho render)
 
+**Câu hỏi làm rõ + bổ sung TC (cập nhật 2026-07-10):**
+- Output TC có thể kèm `openQuestions[]`. `OutputPanel.jsx` render **`TcClarificationForm`**: câu hỏi có phương án gợi ý (AI xuất "Câu hỏi? Gợi ý: A / B / C" — quy tắc trong system prompt testcase) → `parseTcQuestion` tách thành **chip bấm chọn** (chọn nhiều) + ô "Khác"; câu mở → textarea. Submit → `handleTcClarificationSubmit` (main.jsx) gộp Q&A → `appendTestCases(note)`.
+- **Bổ sung TC**: `appendTestCases(noteOverride?)` (main.jsx) gửi TC hiện có + ghi chú → AI chỉ sinh case MỚI (không lặp) → merge + lưu. Ô "Bổ sung thêm" thủ công dùng chung hàm này (guard `typeof noteOverride === 'string'` vì onClick truyền event).
+- **Auto-save**: sửa TC trong bảng chỉ cập nhật state (`handleUpdateTestCases`); phải bấm "Lưu thay đổi" (`handleSaveEditedTestCases`) mới ghi DB. Lịch sử = `skill_runs` (0 token).
+
 ---
 
 ### FLOW 4 — Auto Audit TC sau khi gen (nối tiếp Flow 3)
@@ -442,6 +447,12 @@ TC.type           → Lark "Loại TC" (single_select option_id)
 - Push khi user chưa click confirm
 - Lưu Lark credentials vào DB/file
 - Đổi STANDARD_FIELDS mà không update mapping
+
+**Cập nhật 2026-07-10 (`src/server/services/lark.service.js` — nguồn thật hiện tại, đoạn mô tả cũ ở trên đã lỗi thời):**
+- **Push từ MỌI cấp node**: `pushTestCases(nodeId)` gom TOÀN BỘ TC trong nhánh node qua `getTestCasesForScope(node.type, nodeId)`, mỗi TC mang `_path` (module/screen/feature) RIÊNG → `buildRecordFields(tc, tc._path)` ghi đúng ô. Đẩy từ project/module/screen/feature đều đúng vị trí. Bảng test case đặt tên = tên project (`ensureTableName` PATCH `/tables/{id}`).
+- **Field set 13 cột** (`buildRequiredFieldDefs`): ID, Screen, Module, Feature, Title, Type, Priority, Preconditions, Steps, Expected Result, Test Data, Status, Related Bug. **Module = single-select** (`ensureModuleOptions` nạp động tên module thật vào options; Type/Priority/Status cố định qua `SELECT_FIELD_OPTIONS`).
+- **"Lark cả nhánh"** (`pushTestCasesScope`): 1 project = 1 bảng; System scope → nhiều bảng cùng Base. `syncRowsToTable(link, token, rows, tableCreated)` — bảng mới ép create hết (bỏ qua `lark_record_id` cũ); fallback update→create khi record cũ "not found".
+- Dedup qua `test_cases.lark_record_id` (append-only, chưa xoá).
 
 ---
 

@@ -112,11 +112,11 @@ export function TestCaseReviewPanel({
             {modifyCount} đề xuất sửa · {deleteCount} đề xuất xoá · {newCount} case mới
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={onAcceptAll}>Áp dụng tất cả</Button>
-          <Button variant="outline" size="sm" onClick={onKeepAll}>Giữ nguyên</Button>
-          <Button variant="ghost" size="sm" onClick={onDismiss}>Bỏ qua</Button>
-          <Button variant="default" size="sm" onClick={onApply}>Áp dụng</Button>
+        <div className="flex items-center gap-2 flex-nowrap shrink-0">
+          <Button variant="outline" size="sm" onClick={onAcceptAll} className="whitespace-nowrap">Áp dụng tất cả</Button>
+          <Button variant="outline" size="sm" onClick={onKeepAll} className="whitespace-nowrap">Giữ nguyên</Button>
+          <Button variant="ghost" size="sm" onClick={onDismiss} className="whitespace-nowrap">Bỏ qua</Button>
+          <Button variant="default" size="sm" onClick={onApply} className="whitespace-nowrap">Áp dụng</Button>
         </div>
       </div>
 

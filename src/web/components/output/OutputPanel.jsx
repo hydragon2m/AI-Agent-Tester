@@ -74,6 +74,103 @@ function ClarificationForm({ questions, onSubmit, loading }) {
   );
 }
 
+// Tách câu hỏi openQuestions thành { text, options[] }. AI gợi ý phương án ở cuối
+// theo dạng "câu hỏi? Gợi ý: A / B / C" (hoặc "Options: ...") → hiện thành các nút
+// bấm chọn thay vì bắt gõ tay. Không có gợi ý → options rỗng → dùng textarea.
+function parseTcQuestion(raw) {
+  const str = String(raw || '').trim();
+  const m = str.match(/^([\s\S]*?)(?:gợi\s*ý|options?|lựa\s*chọn)\s*[:：]\s*(.+)$/i);
+  if (!m) return { text: str, options: [] };
+  const text = m[1].replace(/[\s\-–—:：]+$/, '').trim() || str;
+  const options = m[2].split(/\s*[\/|;,]\s*/).map(s => s.trim()).filter(Boolean);
+  return { text, options };
+}
+
+// Form trả lời batch các câu hỏi "openQuestions" của skill Test Case: câu nào có
+// phương án gợi ý → bấm chọn (chip, chọn nhiều được) + ô "Khác" tùy chọn; câu mở →
+// textarea. Submit 1 lần → main.jsx gộp Q&A và bổ sung TC (không gõ tay từng câu).
+function TcClarificationForm({ questions, onSubmit, loading }) {
+  const parsed = questions.map(parseTcQuestion);
+  const [selected, setSelected] = useState(() => parsed.map(() => []));
+  const [custom, setCustom] = useState(() => parsed.map(() => ''));
+
+  function toggleOption(i, opt) {
+    setSelected(prev => prev.map((arr, idx) => {
+      if (idx !== i) return arr;
+      return arr.includes(opt) ? arr.filter(x => x !== opt) : [...arr, opt];
+    }));
+  }
+  function setCustomAt(i, val) {
+    setCustom(prev => { const next = [...prev]; next[i] = val; return next; });
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const pairs = parsed
+      .map((q, i) => {
+        const parts = [...selected[i], (custom[i] || '').trim()].filter(Boolean);
+        return { q: q.text, a: parts.join(', ') };
+      })
+      .filter(p => p.a);
+    if (!pairs.length) return;
+    onSubmit(pairs);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="border border-amber-500/30 bg-amber-500/5 p-3 rounded space-y-3 mb-4 animate-in fade-in slide-in-from-top-4 duration-200">
+      <div className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
+        <AlertTriangle className="w-3 h-3" /> Câu hỏi cần xác nhận — chọn phương án / trả lời để bổ sung test case
+      </div>
+      <div className="space-y-3">
+        {parsed.map((q, i) => (
+          <div key={i} className="flex flex-col gap-1.5">
+            <label className="text-xs text-slate-300">{q.text}</label>
+            {q.options.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {q.options.map(opt => {
+                  const active = selected[i].includes(opt);
+                  return (
+                    <button
+                      type="button"
+                      key={opt}
+                      onClick={() => toggleOption(i, opt)}
+                      disabled={loading}
+                      className={`px-2.5 py-1 rounded-md text-xs border transition-colors ${active
+                        ? 'bg-amber-500 border-amber-500 text-slate-950 font-semibold'
+                        : 'bg-slate-950 border-border text-slate-300 hover:border-amber-500/50'}`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+                <input
+                  type="text"
+                  className="flex-1 min-w-[120px] h-7 px-2 rounded-md border border-border bg-slate-950 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  placeholder="Khác (tùy chọn)..."
+                  value={custom[i] || ''}
+                  onChange={e => setCustomAt(i, e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            ) : (
+              <textarea
+                className="w-full min-h-[52px] p-2 rounded-md border border-border bg-slate-950 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                placeholder="Nhập câu trả lời..."
+                value={custom[i] || ''}
+                onChange={e => setCustomAt(i, e.target.value)}
+                disabled={loading}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <Button variant="outline" type="submit" disabled={loading} className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10">
+        {loading ? 'Đang bổ sung...' : 'Trả lời & bổ sung test case'}
+      </Button>
+    </form>
+  );
+}
+
 function SrsCompleteBanner({ signature }) {
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => setDismissed(false), [signature]);
@@ -91,7 +188,7 @@ function SrsCompleteBanner({ signature }) {
   );
 }
 
-export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading, onUpdateTestCases, nodePath }) {
+export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onSubmitClarifications, loading, onUpdateTestCases, onSubmitTcQuestions, nodePath }) {
   if (!output && !rawOutput) {
     if (activeSkill === 'testcase') {
       return (
@@ -129,6 +226,8 @@ export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDeci
         onApplyReview={onApplyReview}
         onDismissReview={onDismissReview}
         onUpdateTestCases={onUpdateTestCases}
+        onSubmitTcQuestions={onSubmitTcQuestions}
+        loading={loading}
         nodePath={nodePath}
       />
     );
@@ -156,7 +255,7 @@ export function OutputPanel({ activeSkill, output, rawOutput, review, reviewDeci
   );
 }
 
-function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onUpdateTestCases, nodePath }) {
+function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggestionDecisions, onToggleDecision, onToggleSuggestion, onAcceptAllReview, onKeepAllReview, onApplyReview, onDismissReview, onUpdateTestCases, onSubmitTcQuestions, loading, nodePath }) {
   if (!result?.testCases) return <CodeOutput value={rawOutput} />;
   const hasOverview = Boolean(result.summary) || result.assumptions?.length > 0 || result.openQuestions?.length > 0;
 
@@ -177,14 +276,23 @@ function TestCaseOutput({ result, rawOutput, review, reviewDecisions, newSuggest
             </div>
           )}
           {result.openQuestions?.length > 0 && (
-            <div className="border border-amber-500/20 bg-amber-500/5 p-3 rounded space-y-1">
-              <div className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> Câu hỏi cần xác nhận từ AI
+            onSubmitTcQuestions && !review ? (
+              <TcClarificationForm
+                key={result.openQuestions.join('_')}
+                questions={result.openQuestions}
+                onSubmit={onSubmitTcQuestions}
+                loading={loading}
+              />
+            ) : (
+              <div className="border border-amber-500/20 bg-amber-500/5 p-3 rounded space-y-1">
+                <div className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> Câu hỏi cần xác nhận từ AI
+                </div>
+                <ul className="list-disc pl-4 text-xs text-slate-400 space-y-0.5">
+                  {result.openQuestions.map((q, i) => <li key={i}>{q}</li>)}
+                </ul>
               </div>
-              <ul className="list-disc pl-4 text-xs text-slate-400 space-y-0.5">
-                {result.openQuestions.map((q, i) => <li key={i}>{q}</li>)}
-              </ul>
-            </div>
+            )
           )}
         </div>
       )}
