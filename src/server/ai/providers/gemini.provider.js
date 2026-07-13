@@ -2,10 +2,18 @@
 // gặp "high demand"/503 (spike tạm thời). Quota (429/RESOURCE_EXHAUSTED) ném
 // QUOTA_EXCEEDED ngay để lớp trên xoay key / fallback provider.
 async function callGeminiSingle(systemPrompt, userContent, key, image, expectJson) {
-  // Thử gemini-3 trước (một số key/token đời mới CHỈ dùng được gemini-3, các model
-  // 2.x báo "no longer available to new users"), rồi rơi về 2.x cho key AIza thường.
+  // Thử các model đời mới (3.5, 3.1) trước, rồi rơi về 2.5 nếu cần.
   // Model không khả dụng (404) sẽ bị bỏ qua nhanh để sang model kế.
-  const MODELS = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
+  // (Đã bỏ gemini-1.5-* vì Google ngừng cho user mới → luôn 404, chỉ tốn 1 vòng request.)
+  const MODELS = [
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-3.1-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-3-flash-preview',
+    'gemini-flash-latest'
+  ];
 
   const parts = image
     ? [{ inline_data: { mime_type: image.mediaType, data: image.data } }, { text: userContent }]
